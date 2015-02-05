@@ -5,6 +5,7 @@
 #include "utility.h"
 #include "timer.h"
 #include "random.h"
+#include "ptools_ppf.h"
 #include "mg.h"
 
 
@@ -67,6 +68,27 @@ int main(int argc, const char **argv)
     int i;
     
     char *t_names[16]; //Timer names
+
+	/*MPI CODE INSERT*/
+	int mpi_rank, mpi_size;
+	int size;
+	
+	int argc_test;
+	char ** argv_test;
+	MPI_Init( &argc_test, &argv_test );
+	
+	MPI_Comm_rank( MPI_COMM_WORLD, &mpi_rank );
+	MPI_Comm_size( MPI_COMM_WORLD, &mpi_size );
+	
+	PPF_Print( MPI_COMM_WORLD, "Message from %N\n" );
+	PPF_Print( MPI_COMM_WORLD, (mpi_rank < (mpi_size/2) )
+				? "Message from first half of nodes (%N)\n"
+				: "Message from second half of nodes\n" );
+	PPF_Print( MPI_COMM_WORLD, (mpi_rank % 2)
+				? "[%N] Message from odd numbered nodes\n"
+				: "[%N] Message from even numbered nodes\n" );
+	MPI_Finalize();		
+	/*MPI CODE INSERT END*/
     
     init_timers();
     timer_start(T_init);

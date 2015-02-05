@@ -38,7 +38,7 @@ endif
 #---------------------------------------------------------------------------
 # This is the C compiler used for MPI programs
 #---------------------------------------------------------------------------
-#CC = gcc
+CC = mpicc
 # This links C programs; usually the same as ${CC}
 
 #---------------------------------------------------------------------------
@@ -75,4 +75,4 @@ WTIME  = wtime.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(PROGRAM): $(OBJS)
-	$(CC) -o $@ $(OBJS) $(LDFLAGS)
+	$(CC) -o $@ $(OBJS) $(LDFLAGS) -L lib -lptools_ppf
