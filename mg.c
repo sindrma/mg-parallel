@@ -18,10 +18,9 @@
 #include "globals.h"
 #include "results.h"
 #include "includes.h"
+#include "random.h"
 #include "utility.h"
 #include "timer.h"
-#include "random.h"
-#include "ptools_ppf.h"
 #include "mg.h"
 
 
@@ -60,6 +59,7 @@ int main(int argc, const char **argv)
 	int mpi_rank, mpi_size;
 	int size;
 	
+    /*
 	int argc_test;
 	char ** argv_test;
 	MPI_Init( &argc_test, &argv_test );
@@ -67,7 +67,7 @@ int main(int argc, const char **argv)
 	MPI_Comm_rank( MPI_COMM_WORLD, &mpi_rank );
 	MPI_Comm_size( MPI_COMM_WORLD, &mpi_size );
 	
-	if(mpi_rank == 0){
+	if(mpi_rank == 0){ */
 		init_globals();
 		//k is the current level. It is passed down through subroutine args and is NOT global. 
 		//it is the current iteration.
@@ -198,8 +198,8 @@ int main(int argc, const char **argv)
 	    v = alloc3D(n1, n2, n3);
 
 	    zero3(u[0],n1,n2,n3); //zero-out all of u
-	    zran3(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
-
+	    gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
+        
 	    resid(u[0],v,r[0],n1,n2,n3,a);
 
 	    //--------------------------------------------------------------------
@@ -210,9 +210,10 @@ int main(int argc, const char **argv)
 	    //sets all the values in u equal to 0
 	    zero3(u[0],n1,n2,n3);
 	    //i think this is what actually creates the error
-	    zran3(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
+	    gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
+    
 	    timer_stop(T_init);
-
+        
 	    timer_start(T_bench);
 
 	    if (timeron) timer_start(T_resid2);
@@ -230,7 +231,7 @@ int main(int argc, const char **argv)
 		//compute the residual error here...
 	        resid(u[0],v,r[0],n1,n2,n3,a);
 	        if (timeron) timer_stop(T_resid2);
-	    }
+	    } 
 	    timer_stop(T_bench);
 
 	    tinit = timer_elapsed(T_init);
@@ -293,7 +294,8 @@ int main(int argc, const char **argv)
 	    freeGrids(r);
 	    free(v);
 
-	}
+	/*}
+
 	PPF_Print( MPI_COMM_WORLD, "Message from %N\n" );
 	PPF_Print( MPI_COMM_WORLD, (mpi_rank < (mpi_size/2) )
 				? "Message from first half of nodes (%N)\n"
@@ -302,7 +304,7 @@ int main(int argc, const char **argv)
 				? "[%N] Message from odd numbered nodes\n"
 				: "[%N] Message from even numbered nodes\n" );
 	MPI_Barrier(MPI_COMM_WORLD);
-	MPI_Finalize();
+	MPI_Finalize();*/
 	return 0;
 }
 
@@ -360,20 +362,174 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 }
 //setup function - FLAGGED
 //NOTE: this is what creates the error in the first place
-//---------------------------------------------------------------------
-//     zran3  loads +1 at ten randomly chosen points,
-//     loads -1 at a different ten random points,
-//     and zero elsewhere.
-//---------------------------------------------------------------------
-void zran3(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
+
+void gen_v(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
 {
+    //---------------------------------------------------------------------
+    //      Generate righthandside of the equation A*u = v
+    //      for the serial version of the code.
+    //---------------------------------------------------------------------
+    int m0, m1, mm=10, i1, i2, i3, i;
+    int *j1 = malloc(sizeof(int)*mm*2), 
+        *j2 = malloc(sizeof(int)*mm*2),
+        *j3 = malloc(sizeof(int)*mm*2);
+    
+    zran3(z,n1,n2,n3,nx,ny,j1,j2,j3, &m1, &m0, mm, grid);
+    #pragma omp parallel for private(i1,i2,i3)
+    for(i3=0;i3<n3;i3++)
+        for(i2=0;i2<n2;i2++)
+            for(i1=0;i1<n1;i1++)
+                z[i3][i2][i1] = 0.0;
+    for(i=mm;i>=m0;i--)
+        z[j3[i-1]][j2[i-1]][j1[i-1]] = -1.0;
+    for(i=mm;i>=m1;i--)
+        z[j3[i-1+mm]][j2[i-1+mm]][j1[i-1+mm]] = 1.0;
+        
+    free(j1);
+    free(j2);
+    free(j3);
+    
+
+    comm3(z,n1,n2,n3);      
+}
+
+void zran3(REAL ***z,int n1,int n2,int n3,int nx,int ny,int* j1,int* j2,int* j3,int *m1, int *m0, int mm, grid_t* grid){
+    int is1 = grid->is1, is2 = grid->is2, is3 = grid->is3, ie1 = grid->ie1, ie2 = grid->ie2, ie3 = grid->ie3;
+    int i, i0, i1, i2, i3, d1, e1, e2, e3;
+    int *jg = malloc(sizeof(int)*4*mm*2);
+    double xx, x0, x1, a1, a2, ai;
+    double best;
+    double *ten= malloc(sizeof(double)*mm*2);
+
+    zero3(z,n1,n2,n3);
+    i = is1-2+nx*(is2-2+ny*(is3-2));
+
+    d1 = ie1 - is1 + 1;
+    e1 = ie1 - is1 + 2;
+    e2 = ie2 - is2 + 2;
+    e3 = ie3 - is3 + 2;
+
+    double seed=314159265.0, a=pow(5.0,13);
+    //double rng = drand48();
+    a1 = rnd_power( a, nx );
+    a2 = rnd_power( a, nx*ny );
+    ai = rnd_power( a, i );
+    x0 = rnd_randlc( seed, ai );
+    
+    for(i3=2;i3<=e3;i3++)
+    {
+        x1 = x0;
+        for(i2 = 2;i2<=e2;i2++)
+        {
+            xx = x1;
+            rnd_vranlc( d1, xx, a,z[0][0],(1+n1*(i2-1+n2*(i3-1))));
+            x1 = rnd_randlc( x1, a1 );
+        }
+        x0 = rnd_randlc( x0, a2 );
+    }
+
+    for(i=0;i<mm;i++)
+    {
+        ten[i+mm] = 0.0;
+        j1[i+mm] = 0;
+        j2[i+mm] = 0;
+        j3[i+mm] = 0;
+        ten[i] = 1.0;
+        j1[i] = 0;
+        j2[i] = 0;
+        j3[i] = 0;
+    }
+
+    for(i3=1;i3<n3-1;i3++)
+    {
+        for(i2=1;i2<n2-1;i2++)
+        {
+            for(i1=1;i1<n1-1;i1++)
+            {
+                if( z[i3][i2][i1] > ten[mm] )
+                {
+                    ten[mm] = z[i3][i2][i1]; 
+                    j1[mm] = i1;
+                    j2[mm] = i2;
+                    j3[mm] = i3;
+                    bubble( ten, j1, j2, j3, mm, 1 );
+                }
+                if( z[i3][i2][i1] < ten[0] )
+                {
+                    ten[0] = z[i3][i2][i1]; 
+                    j1[0] = i1;
+                    j2[0] = i2;
+                    j3[0] = i3;
+                    bubble( ten, j1, j2, j3, mm, 0 );
+                }
+            }
+        }
+    }
+
+    //---------------------------------------------------------------------
+    //     Now which of these are globally best?
+    //---------------------------------------------------------------------
+    i1 = mm;
+    i0 = mm;
+    for(i=mm-1;i>=0;i--)
+    {
+        //best = z[0][0][j1[i1-1+mm]+n1*(j2[i1-1+mm]+n2*(j3[i1-1+mm]))];
+        best = z[j1[i1-1+mm]][j2[i1-1+mm]][j3[i1-1+mm]];
+        if(best==z[j1[i1-1+mm]][j2[i1-1+mm]][j3[i1-1+mm]])
+        {
+            jg[4*(i+mm)] = 0;
+            jg[1+4*(i+mm)] = is1 - 2 + j1[i1-1+mm]; 
+            jg[2+4*(i+mm)] = is2 - 2 + j2[i1-1+mm]; 
+            jg[3+4*(i+mm)] = is3 - 2 + j3[i1-1+mm]; 
+            i1 = i1-1;
+        }
+        else
+        {
+            jg[4*(i+mm)] = 0;
+            jg[1+4*(i+mm)] = 0; 
+            jg[2+4*(i+mm)] = 0; 
+            jg[3+4*(i+mm)] = 0; 
+        }         
+        ten[i+mm] = best;
+
+        best = z[j3[i0-1]][j2[i0-1]][j1[i0-1]];
+        if(best==z[j3[i0-1]][j2[i0-1]][j1[i0-1]])
+        {
+            jg[4*i] = 0;
+            jg[1+4*i] = is1 - 2 + j1[i0-1]; 
+            jg[2+4*i] = is2 - 2 + j2[i0-1]; 
+            jg[3+4*i] = is3 - 2 + j3[i0-1]; 
+            i0 = i0-1;
+        }
+        else
+        {
+            jg[4*i] = 0;
+            jg[1+4*i] = 0; 
+            jg[2+4*i] = 0; 
+            jg[3+4*i] = 0; 
+        }
+        ten[i] = best;
+    }
+    
+    
+   
+
+    free(jg);
+    free(ten);
+    
+    *m1 = i1+1;
+    *m0 = i0+1;
+    
+}
+
+void gen_v_orig(REAL ***z,int n1,int n2,int n3,int nx,int ny, grid_t* grid){
     int is1 = grid->is1, is2 = grid->is2, is3 = grid->is3, ie1 = grid->ie1, ie2 = grid->ie2, ie3 = grid->ie3;
     int i0, m0, m1;
 
     int mm=10, i1, i2, i3, d1, e1, e2, e3;
     double xx, x0, x1, a1, a2, ai;
-    double *ten= malloc(sizeof(double)*mm*2);
     double best;
+    double *ten= malloc(sizeof(double)*mm*2);
     int i;
     int *j1 = malloc(sizeof(int)*mm*2), 
         *j2 = malloc(sizeof(int)*mm*2),
@@ -395,9 +551,11 @@ void zran3(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
     ai = rnd_power( a, i );
     x0 = rnd_randlc( seed, ai );
     
-    for(i3=2;i3<=e3;i3++) {
+    for(i3=2;i3<=e3;i3++)
+    {
         x1 = x0;
-        for(i2 = 2;i2<=e2;i2++) {
+        for(i2 = 2;i2<=e2;i2++)
+        {
             xx = x1;
             rnd_vranlc( d1, xx, a,z[0][0],(1+n1*(i2-1+n2*(i3-1))));
             x1 = rnd_randlc( x1, a1 );
@@ -417,17 +575,22 @@ void zran3(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
         j3[i] = 0;
     }
 
-    for(i3=1;i3<n3-1;i3++) {
-        for(i2=1;i2<n2-1;i2++) {
-            for(i1=1;i1<n1-1;i1++) {
-                if( z[i3][i2][i1] > ten[mm] ) {
+    for(i3=1;i3<n3-1;i3++)
+    {
+        for(i2=1;i2<n2-1;i2++)
+        {
+            for(i1=1;i1<n1-1;i1++)
+            {
+                if( z[i3][i2][i1] > ten[mm] )
+                {
                     ten[mm] = z[i3][i2][i1]; 
                     j1[mm] = i1;
                     j2[mm] = i2;
                     j3[mm] = i3;
                     bubble( ten, j1, j2, j3, mm, 1 );
                 }
-                if( z[i3][i2][i1] < ten[0] ) {
+                if( z[i3][i2][i1] < ten[0] )
+                {
                     ten[0] = z[i3][i2][i1]; 
                     j1[0] = i1;
                     j2[0] = i2;
@@ -443,16 +606,20 @@ void zran3(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
     //---------------------------------------------------------------------
     i1 = mm;
     i0 = mm;
-    for(i=mm-1;i>=0;i--) {
+    for(i=mm-1;i>=0;i--)
+    {
         //best = z[0][0][j1[i1-1+mm]+n1*(j2[i1-1+mm]+n2*(j3[i1-1+mm]))];
         best = z[j1[i1-1+mm]][j2[i1-1+mm]][j3[i1-1+mm]];
-        if(best==z[j1[i1-1+mm]][j2[i1-1+mm]][j3[i1-1+mm]]) {
+        if(best==z[j1[i1-1+mm]][j2[i1-1+mm]][j3[i1-1+mm]])
+        {
             jg[4*(i+mm)] = 0;
             jg[1+4*(i+mm)] = is1 - 2 + j1[i1-1+mm]; 
             jg[2+4*(i+mm)] = is2 - 2 + j2[i1-1+mm]; 
             jg[3+4*(i+mm)] = is3 - 2 + j3[i1-1+mm]; 
             i1 = i1-1;
-        } else {
+        }
+        else
+        {
             jg[4*(i+mm)] = 0;
             jg[1+4*(i+mm)] = 0; 
             jg[2+4*(i+mm)] = 0; 
@@ -461,13 +628,16 @@ void zran3(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
         ten[i+mm] = best;
 
         best = z[j3[i0-1]][j2[i0-1]][j1[i0-1]];
-        if(best==z[j3[i0-1]][j2[i0-1]][j1[i0-1]]) {
+        if(best==z[j3[i0-1]][j2[i0-1]][j1[i0-1]])
+        {
             jg[4*i] = 0;
             jg[1+4*i] = is1 - 2 + j1[i0-1]; 
             jg[2+4*i] = is2 - 2 + j2[i0-1]; 
             jg[3+4*i] = is3 - 2 + j3[i0-1]; 
             i0 = i0-1;
-        } else {
+        }
+        else
+        {
             jg[4*i] = 0;
             jg[1+4*i] = 0; 
             jg[2+4*i] = 0; 
@@ -475,9 +645,17 @@ void zran3(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
         }
         ten[i] = best;
     }
+    
+    
+   
 
+    free(jg);
+    free(ten);
+    
     m1 = i1+1;
     m0 = i0+1;
+    printf("m1=%d\n", m1);
+    printf("m0=%d\n", m0);
     #pragma omp parallel for private(i1,i2,i3)
     for(i3=0;i3<n3;i3++)
         for(i2=0;i2<n2;i2++)
@@ -487,14 +665,12 @@ void zran3(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
         z[j3[i-1]][j2[i-1]][j1[i-1]] = -1.0;
     for(i=mm;i>=m1;i--)
         z[j3[i-1+mm]][j2[i-1+mm]][j1[i-1+mm]] = 1.0;
-
     free(j1);
     free(j2);
     free(j3);
-    free(jg);
-    free(ten);
+    
 
-    comm3(z,n1,n2,n3);
+    comm3(z,n1,n2,n3);   
 }
 
 double norm2u3(REAL*** r,int n1,int n2,int n3, int nx,int ny,int nz)

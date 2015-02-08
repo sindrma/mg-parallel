@@ -393,19 +393,18 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 //---------------------------------------------------------------------
 void zran3(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
 {
-    int is1 = grid->is1, is2 = grid->is2, is3 = grid->is3, ie1 = grid->ie1, ie2 = grid->ie2, ie3 = grid->ie3;
-    int i0, m0, m1;
-
-    int mm=10, i1, i2, i3, d1, e1, e2, e3;
-    double xx, x0, x1, a1, a2, ai;
+    int mm=10;
     double *ten= malloc(sizeof(double)*mm*2);
-    double best;
-    int i;
+    
     int *j1 = malloc(sizeof(int)*mm*2), 
         *j2 = malloc(sizeof(int)*mm*2),
         *j3 = malloc(sizeof(int)*mm*2);
     int *jg = malloc(sizeof(int)*4*mm*2);
 
+    int is1 = grid->is1, is2 = grid->is2, is3 = grid->is3, ie1 = grid->ie1, ie2 = grid->ie2, ie3 = grid->ie3;
+    int i0, m0, m1, i1, i2, i3, d1, e1, e2, e3;
+    double xx, x0, x1, a1, a2, ai, best;
+    int i;
     zero3(z,n1,n2,n3);
     i = is1-2+nx*(is2-2+ny*(is3-2));
 

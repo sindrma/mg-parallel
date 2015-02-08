@@ -1,6 +1,7 @@
 #include <assert.h>
 #include "utility.h"
 
+
 double TestNorm(double r[],int n1,int n2,int n3)
 {
     double rnm2=0.0;
@@ -27,6 +28,7 @@ void zero3(double ***z,int n1,int n2,int n3)
                 z[i3][i2][i1] = 0.; //[off+i1+n1*i2+n1*n2*i3]=0.0;
 
 }
+
 
 //Fill the 3-dimensional array z with zeroes
 void zero3old(double z[],int off,int n1,int n2,int n3)

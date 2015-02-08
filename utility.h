@@ -3,6 +3,7 @@
 
 #include "types.h"
 #include "includes.h"
+#include "mg.h"
 
 #define ERROR(s) printf s; printf("\n"); fflush(stdout);
 #define DEBUG(s) printf s; printf("\n"); fflush(stdout);

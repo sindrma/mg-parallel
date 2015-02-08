@@ -9,7 +9,9 @@ typedef struct grid_s
 } grid_t;
 
 
-void zran3(REAL ***z,int n1,int n2,int n3,int nx,int ny, grid_t* grid);
+void zran3(REAL ***z,int n1,int n2,int n3,int nx,int ny,int* j1,int* j2,int* j3,int *m1, int *m0, int mm, grid_t* grid);
+void gen_v(REAL ***z,int n1,int n2,int n3,int nx,int ny, grid_t* grid);
+void gen_v_orig(REAL ***z,int n1,int n2,int n3,int nx,int ny, grid_t* grid);
 void setup(int *n1, int *n2, int *n3, grid_t* grid);
 int getInputPars();
 void resid(REAL ***u, REAL*** v, REAL*** r, int n1,int n2,int n3, double a[4]);
