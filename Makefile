@@ -4,7 +4,7 @@ PROGRAM=$(BENCHMARK)
 
 include make.def
 
-OBJS = mg.o results.o timer.o random.o utility.o
+OBJS = mg.o functions/setup.o functions/results.o timer.o random.o utility.o
 
 ifdef class
     CLASS=${class}
@@ -30,6 +30,7 @@ clean:
 	- rm -f *.o *~
 	- rm -f npbparams.h
 	- rm -f mg
+	- rm -f functions/*.o
 	- if [ -d rii_files ]; then rm -r rii_files; fi
 
 test: mg

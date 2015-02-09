@@ -1,28 +1,25 @@
 /*
-	Current Goals:
-		-Plan what parameters we should integrate into running time execution and testing
-			-data split geometries (ie: strips or blocks)
-				-this might be computable just using the alpha-beta cost computation
-					-would require that we compute alpha and beta
-			-# of nodes (already implemented)
-			-size of matrix (already implemented)
-		-Move flagged functions to another file- like utilities.c
-		-Map out data, and how we should split it using MPI
-			-Split data using MPI
-			-compute results using MPI
-		
-		mpirun -np 2 ./mg
+	-=Current Goals=-
+	-distribute global indices to generate the matrices
+	-start parallelizing the "v" cycle
+
+	-=Command Line=-
+	mpirun -np 2 ./mg -n 256
+	parameter options:
+	-s	: seed
+	-n	: problem size
+	-nit	: number of iterations
+	-lt	: sets the lt... i think this defines how large the "W" cycle is?
 */
 
 #include <omp.h>
-#include "globals.h"
-#include "results.h"
-#include "includes.h"
+#include "functions/setup.h"
+#include "functions/results.h"
 #include "random.h"
 #include "utility.h"
 #include "timer.h"
+#include "ptools_ppf.h"
 #include "mg.h"
-
 
 //Some global constants
 const char * BMName="MG"; //Benchmark name
@@ -32,374 +29,127 @@ results_t results;
 int zoff,zsize3,zsize2,zsize1;
 int uoff,usize1,usize2,usize3;
 int roff,rsize1,rsize2,rsize3;
-//print function - FLAGGED
-void print_timers(char **t_names)
-{ 
-    printf("  SECTION   Time (secs)\n");
-
-    double tmax = timer_elapsed(T_bench);
-    if (tmax == 0.0) tmax = 1.0;
-
-    int i;
-    for (i=T_bench;i<=T_last;i++)
-    {
-        double t = timer_elapsed(i);
-        if (i==T_resid2) {
-            t = timer_elapsed(T_resid);
-            printf("          --> total mg-resid %6.4f (%6.4f %%)\n", t, t*100./tmax);
-        } else {
-            printf("        %s  %6.4f (%6.4f%%)\n", t_names[i], t, t*100./tmax);
-        }
-    }
-}
 
 int main(int argc, const char **argv)
 {
+	//contains global values-
+	struct params *global_params;
+	/*local processor setup- 
+		-initializes variables that will be the same for every processor
+		-parses command line options
+	*/
+	global_params = setup_local(argc,argv);
 	
-	int mpi_rank, mpi_size;
-	int size;
-	
-    /*
-	int argc_test;
+	//MPI initialization
+	int argc_test,mpi_rank,mpi_size;
 	char ** argv_test;
 	MPI_Init( &argc_test, &argv_test );
-	
 	MPI_Comm_rank( MPI_COMM_WORLD, &mpi_rank );
 	MPI_Comm_size( MPI_COMM_WORLD, &mpi_size );
 	
-	if(mpi_rank == 0){ */
-		init_globals();
-		//k is the current level. It is passed down through subroutine args and is NOT global. 
-		//it is the current iteration.
-		int k, it;
+	init_globals();
+	
+	//k is the current level. It is passed down through subroutine args and is NOT global. 
+	//it is the current iteration.
+	int k, it;
+	double tinit, mflops = 0;
+	//pointers of pointers in 3-D
+	REAL**** u, //approximation matrix
+		**** r, //residual error matrix
+		***  v, //values matrix
+		a[4], c[4]; //what are these used for?
+	
+	double rnm2, epsilon;
+	int n1, n2, n3, nit;
+	double verify_value;
+	bool verified;
+	int i;
 
-		double tinit, mflops = 0;
-		//pointers of pointers in 3-D
-		REAL**** u, //approximation matrix
-			**** r, //residual error matrix
-			***  v, //values matrix
-			a[4], c[4]; //what are these used for?
-
-		double rnm2, epsilon;
-		int n1, n2, n3, nit;
-		double verify_value;
-		bool verified;
-		int i;
-
-		char *t_names[16]; //Timer names
-    
-	    init_timers();
-	    timer_start(T_init);
-
-		//TODO : move these file loads into to another function/file
-	    //Initialize the timer names
-	    FILE* f1;
-	    if( (f1 = fopen("timer.flag", "r")) ) {
-	        timeron = true;
-	        t_names[T_init] = strdup("init");
-	        t_names[T_bench] = strdup("benchmark");
-	        t_names[T_mg3P] = strdup("mg3P");
-	        t_names[T_psinv] = strdup("psinv");
-	        t_names[T_resid] = strdup("resid");
-	        t_names[T_rprj3] = strdup("rprj3");
-	        t_names[T_interp] = strdup("interp");
-	        t_names[T_norm2] = strdup("norm2");
-	        fclose(f1);
-	    } else
-	        timeron = false;
-
-	    //load file
-	    FILE* f2;
-	    if ( (f2 = fopen("mg.input", "r")) ) {
-	        printf("Reading from input file mg.input\n");
-
-	        int ret;
-
-	        ret = fscanf(f2, "%d", &lt);
-	        if(lt>maxlevel) {
-	            printf("lt=%d Maximum allowable=%d\n", lt, maxlevel);
-	            exit(0);
-	        }
-	        ret = fscanf(f2, "%d", &nx[lt-1]);
-	        ret = fscanf(f2, "%d", &ny[lt-1]);
-	        ret = fscanf(f2, "%d", &nz[lt-1]);
-	        ret = fscanf(f2, "%d", &nit);
-	        printf("lt %d x %d y %d z %d nit %d\n", lt, nx[lt-1], ny[lt-1], nz[lt-1], nit);
-
-	        fflush(stdout);
-
-	        for (i = 0; i < 8; i++)
-	            debug_vec[i] = debug_default;
-	        fclose(f2);
-	    } else {
-	        printf("No input file. Using compiled defaults.\n");
-
-	        lt = lt_default;
-	        nit = nit_default;
-	        nx[lt-1] = nx_default;
-	        ny[lt-1] = ny_default;
-	        nz[lt-1] = nz_default;
-	        for (i = 0; i < 8; i++)
-	            debug_vec[i] = debug_default;
-	    }  
-
-	    if (nx[lt-1] != ny[lt-1] || nx[lt-1] != nz[lt-1])
-	        Class = 'U';
-	    else if(nx[lt-1]==32&&nit==4 )
-	        Class = 'S';
-	    else if( nx[lt-1]==64&&nit==40 )
-	        Class = 'W';
-	    else if( nx[lt-1]==256&&nit==20 )
-	        Class= 'B';
-	    else if( nx[lt-1]==512&&nit==20 )
-	        Class = 'C';
-	    else if( nx[lt-1]==256&&nit==4 )
-	        Class = 'A';
-	    else{
-	        Class = 'U';
-	    }
-
-	    a[0] = -8.0/3.0; 
-	    a[1] =  0.0;
-	    a[2] =  1.0/6.0; 
-	    a[3] =  1.0/12.0;
-
-	    if(Class=='A'||Class=='S'||Class=='W') 
-	    {
-	        //---------------------------------------------------------------------
-	        //     Coefficients for the S(a) smoother
-	        //---------------------------------------------------------------------
-	        c[0] =  -3.0/8.0;
-	        c[1] =  +1.0/32.0;
-	        c[2] =  -1.0/64.0;
-	        c[3] =   0.0;
-	    } else {
-	        //---------------------------------------------------------------------
-	        //     Coefficients for the S(b) smoother
-	        //---------------------------------------------------------------------
-	        c[0] =  -3.0/17.0;
-	        c[1] =  +1.0/33.0;
-	        c[2] =  -1.0/61.0;
-	        c[3] =   0.0;
-	    }
-
-	    k = lt;
-
-	    printf(" NAS Parallel Benchmarks C version\n");
-	    printf(" Multithreaded Version %s.%c np=%d\n", BMName, CLASS, omp_get_max_threads());
-	    printf(" Size:  %dx%dx%d\n Iterations:   %d\n", nx[lt-1], ny[lt-1], nz[lt-1], nit );
-
-		//PARALLELIZATION START HERE:
-	    //Initialize arrays
-	    grid_t grid;
-	    setup(&n1, &n2, &n3, &grid);
-	    u = allocGrids(lt, n1-2, n2-2, n3-2, 2);
-	    r = allocGrids(lt, n1-2, n2-2, n3-2, 2);
-	    v = alloc3D(n1, n2, n3);
-
-	    zero3(u[0],n1,n2,n3); //zero-out all of u
-	    gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
-        
-	    resid(u[0],v,r[0],n1,n2,n3,a);
-
-	    //--------------------------------------------------------------------
-	    //    One iteration for startup
-	    //--------------------------------------------------------------------
-	    mg3P(u,v,r,a,c,n1,n2,n3);
-	    resid(u[0],v,r[0],n1,n2,n3,a);
-	    //sets all the values in u equal to 0
-	    zero3(u[0],n1,n2,n3);
-	    //i think this is what actually creates the error
-	    gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
-    
-	    timer_stop(T_init);
-        
-	    timer_start(T_bench);
-
-	    if (timeron) timer_start(T_resid2);
-	    resid(u[0],v,r[0],n1,n2,n3,a);
-	    if (timeron) timer_stop(T_resid2);
-	/*
-		// REAL number;
-		// REAL * tempa = (REAL*) malloc(sizeof(REAL)*10);
-		REAL * tempdzyx = (REAL*) malloc(sizeof(REAL)*n1*n2*n3);
-		//assign values to temp
-		int i3, i2, i1;
-		double ***z = u[0];
-		//maps 3-D to 1-D array for transmission
-		for(i3=0;i3<n3;i3++){
-		        for(i2=0;i2<n2;i2++){
-		            for(i1=0;i1<n1;i1++){
-					tempdzyx[i3*n1*n2 + i2*n1 + i1] = z[i3][i2][i1];
-				}
-			}
-		}
-		//making the first element 0.1 because it will probably be 0.0- which makes it hard to tell if it actually transmitted correctly
-		tempdzyx[0] = 0.1;
-		REAL * tempa = (REAL*) malloc(sizeof(REAL)*10);
-		for(i1=0;i1<10;i1++){
-			tempa[i1] = tempdzyx[i1] + 1.0;
-		}
-
-		number = -1.5;
-		// MPI_Send(&number, 1, MPI_DOUBLE, 1, 0, MPI_COMM_WORLD);
-		// MPI_Send(tempa, 10, MPI_DOUBLE, 1, 0, MPI_COMM_WORLD);
-		MPI_Send(tempdzyx, n1*n2*n3, MPI_DOUBLE, 1, 0, MPI_COMM_WORLD);
-	*/
-
-	    //nit == number of iterations
-	    for(it=1;it<=nit;it++) {
-	        if (timeron) timer_start(T_mg3P);
-		//actual call to multigrid
-	        mg3P(u,v,r,a,c,n1,n2,n3);
-	        if (timeron) timer_stop(T_mg3P);
-
-	        if (timeron) timer_start(T_resid2);
-		//compute the residual error here...
-	        resid(u[0],v,r[0],n1,n2,n3,a);
-	        if (timeron) timer_stop(T_resid2);
-	    } 
-	    timer_stop(T_bench);
-
-	    tinit = timer_elapsed(T_init);
-	    printf(" Initialization time: %f seconds\n", tinit);
-
-	    rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
-	    double tm = timer_elapsed(T_bench);
-
-		//TODO : move validation and printing code to another function/file
-	    verify_value=0.0;
-	    epsilon = 1.0E-8;
-	    if (CLASS != 'U') {
-	        if(CLASS=='S') 
-	            verify_value = 0.530770700573E-4;
-	        else if(CLASS=='W') 
-	            verify_value = 0.250391406439E-17; 
-	        else if(CLASS=='A') 
-	            verify_value = 0.2433365309E-5;
-	        else if(CLASS=='B') 
-	            verify_value = 0.180056440132E-5;
-	        else if(CLASS=='C') 
-	            verify_value = 0.570674826298E-6;
-	        printf("class %c\n", CLASS);
-	        printf(" L2 Norm is %e\n", rnm2);
-	        if(fabs( rnm2 - verify_value ) < epsilon ) {
-	            verified = 1;
-	            printf(" Deviation is   %e\n", (rnm2 - verify_value));
-	        } else {
-	            verified = 0;
-	            printf(" The correct L2 Norm is %e\n", verify_value);
-	        }
-	    } else {
-	        verified = -1;
-	    }
-
-	    print_verification(CLASS,verified,BMName); 
-
-	    if( tm > 0.0 ) 
-	    {
-	        mflops = 58.0*nx[lt-1]*ny[lt-1]*nz[lt-1];
-	        mflops *= nit / (tm*1000000.0);
-	    }
-
-	    set_results(&results, "MG",
-	            CLASS,
-	            nx[lt-1],
-	            ny[lt-1],
-	            nz[lt-1],
-	            nit,
-	            tm,
-	            mflops,
-	            (const char*)"floating point",
-	            verified,
-	            omp_get_max_threads());
-
-	    print_results(&results, stdout);
-	    if (timeron) print_timers(t_names);
-
-	    freeGrids(u);
-	    freeGrids(r);
-	    free(v);
-
-	/*
+	char *t_names[16]; //Timer names
+		
+	init_timers();
+	timer_start(T_init);
+	
+	//Initialize the timer names
+	timeron = false;
+	
+	//use global parameters to set these
+	lt = global_params->lt;
+	nit = global_params->n_it;
+	nx[lt-1] = global_params->n_size;
+	ny[lt-1] = global_params->n_size;
+	nz[lt-1] = global_params->n_size;
+	Class = global_params->class;
+	
+	//set a and b matrices using the class value
+	set_a(a,global_params);
+	set_c(c,global_params);
+	
+	k = lt;
+	//TODO : processor 0 broadcasts indices
+	if(mpi_rank == 0){
+		printf(" NAS Parallel Benchmarks C version\n");
+		printf(" Multithreaded Version %s.%c np=%d\n", BMName, CLASS, omp_get_max_threads());
+		printf(" Size:  %dx%dx%d\n Iterations:   %d\n", nx[lt-1], ny[lt-1], nz[lt-1], nit );
+		
+		//Initialize arrays
+		grid_t grid;
+		setup(&n1, &n2, &n3, &grid);
+		u = allocGrids(lt, n1-2, n2-2, n3-2, 2);
+		r = allocGrids(lt, n1-2, n2-2, n3-2, 2);
+		v = alloc3D(n1, n2, n3);
+		
+		zero3(u[0],n1,n2,n3); //zero-out all of u
+		gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
+		resid(u[0],v,r[0],n1,n2,n3,a);
+		
+		//--------------------------------------------------------------------
+		//    One iteration for startup
+		//--------------------------------------------------------------------
+		mg3P(u,v,r,a,c,n1,n2,n3);
+		resid(u[0],v,r[0],n1,n2,n3,a);
+		//sets all the values in u equal to 0
+		zero3(u[0],n1,n2,n3);
+		//i think this is what actually creates the error
+		gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
+		
+		timer_stop(T_init);
+		timer_start(T_bench);
+		if (timeron) timer_start(T_resid2);
+		resid(u[0],v,r[0],n1,n2,n3,a);
+		if (timeron) timer_stop(T_resid2);
+		
+		//nit == number of iterations
+		for(it=1;it<=nit;it++) {
+			//actual call to multigrid
+			mg3P(u,v,r,a,c,n1,n2,n3);
+			//compute the residual error here...
+			resid(u[0],v,r[0],n1,n2,n3,a);
+		} 
+		timer_stop(T_bench);
+		
+		tinit = timer_elapsed(T_init);
+		printf(" Initialization time: %f seconds\n", tinit);
+		
+		rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
+		double tm = timer_elapsed(T_bench);
+		
+		//validates the results and prints to console
+		interpret_results(rnm2, global_params, &results, tm);
+		
+		freeGrids(u);
+		freeGrids(r);
+		free(v);
 	} else {
-		// PPF_Print( MPI_COMM_WORLD, "Its the other processor!" );
-		// REAL number;
-		// REAL * tempa = (REAL*) malloc(sizeof(REAL)*10);
-		REAL * tempdzyx = (REAL*) malloc(sizeof(REAL)*258*258*258);
-		// MPI_Recv(&number, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		// MPI_Recv(tempa, 10, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		MPI_Recv(tempdzyx, 258*258*258, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		PPF_Print( MPI_COMM_WORLD,"Process 1 received number %f from process 0\n", tempdzyx[0]);
-		// PPF_Print( MPI_COMM_WORLD,"Processor receive succes\n");
+		PPF_Print( MPI_COMM_WORLD, "Its the other processor!\n" );
 	}
-
-	PPF_Print( MPI_COMM_WORLD, "Message from %N\n" );
-	PPF_Print( MPI_COMM_WORLD, (mpi_rank < (mpi_size/2) )
-				? "Message from first half of nodes (%N)\n"
-				: "Message from second half of nodes\n" );
-	PPF_Print( MPI_COMM_WORLD, (mpi_rank % 2)
-				? "[%N] Message from odd numbered nodes\n"
-				: "[%N] Message from even numbered nodes\n" );
+	
 	MPI_Barrier(MPI_COMM_WORLD);
-	MPI_Finalize();*/
+	PPF_Print( MPI_COMM_WORLD, "Message from %N - finished\n" );
+	
+	MPI_Finalize();
 	return 0;
 }
-
-//setup function - FLAGGED
-void setup(int *n1, int *n2, int *n3, grid_t* grid)
-{
-    int j, k;
-
-    int ax;
-    int size1=3, size2=10;
-    int *mi = malloc(sizeof(int)*size1*size2);
-    int *ng = malloc(sizeof(int)*size1*size2);
-
-    ng[  (lt-1)*size1]=nx[lt-1];
-    ng[1+(lt-1)*size1]=ny[lt-1];
-    ng[2+(lt-1)*size1]=nz[lt-1];
-
-    for(ax=0;ax<size1;ax++)
-        for(k=lt-2;k>=0;k--)
-            ng[ax+k*size1]=ng[ax+(k+1)*size1]/2;
-
-    for(k=lt-2;k>=0;k--) {
-        nx[k]=ng[  k*size1];
-        ny[k]=ng[1+k*size1];
-        nz[k]=ng[2+k*size1];
-    }
-
-    for(k=lt-1;k>=0;k--) {
-        for(ax=0;ax<size1;ax++) {
-            mi[ax+k*size1] = 2 + ng[ax+k*size1];
-        }
-        m1[k]=mi[  k*size1];
-        m2[k]=mi[1+k*size1];
-        m3[k]=mi[2+k*size1];
-    }
-
-    k = lt-1;
-    grid->is1 = 2 + ng[k*size1] - ng[k*size1];
-    grid->ie1 = 1 + ng[k*size1];
-    *n1= 3 + grid->ie1 - grid->is1;
-    grid->is2 = 2 + ng[1+k*size1] - ng[1+k*size1];
-    grid->ie2 = 1 + ng[1+k*size1]; 
-    *n2= 3 + grid->ie2 - grid->is2;
-    grid->is3 = 2 + ng[2+k*size1] - ng[2+k*size1];
-    grid->ie3 = 1 + ng[2+k*size1];
-    *n3= 3 + grid->ie3 - grid->is3;
-
-    ir[lt-1]=0;
-    for(j = lt-2;j>=0;j--) {
-        ir[j]=ir[j+1]+m1[j+1]*m2[j+1]*m3[j+1];
-    }
-
-    free(mi);
-    free(ng);
-}
-//setup function - FLAGGED
-//NOTE: this is what creates the error in the first place
 
 void gen_v(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
 {
@@ -428,7 +178,7 @@ void gen_v(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
     free(j3);
     
 
-    comm3(z,n1,n2,n3);      
+    comm3(z,n1,n2,n3);
 }
 
 void zran3(REAL ***z,int n1,int n2,int n3,int nx,int ny,int* j1,int* j2,int* j3,int *m1, int *m0, int mm, grid_t* grid){
