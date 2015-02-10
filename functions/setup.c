@@ -3,44 +3,12 @@
 	-Working on:
 */
 #include "setup.h"
-
-//Note: the following variables were in npbparams and globals.h
-//	since including these as headers would cause multiple definitions i decided to move them
-const int nx_default = 256; 
-const int ny_default = 256; 
-const int nz_default = 256; 
-const int nit_default = 4; 
-const int lm = 8; 
-const int lt_default = 8; 
-const int debug_default = 0; 
-const int ndim1 = 8; 
-const int ndim2 = 8; 
-const int ndim3 = 8; 
-const bool convertdouble = false;
-const char* compiletime = "08 Feb 2015";
-const char* npbversion = "3.0";
-const char* cs1 = "f77";
-const char* cs2 = "f77";
-const char* cs3 = "(none)";
-const char* cs4 = "(none)";
-const char* cs5 = "-O";
-const char* cs6 = "(none)";
-const char* cs7 = "randi8";
+#include "../npbparams.h"
 
 //Timer IDs-
 const int T_total=0,  T_init=1,  T_bench=2,  T_mg3P=3,
       T_psinv=4,  T_resid=5, T_resid2=6, T_rprj3=7,
       T_interp=8, T_norm2=9, T_last=9;
-
-//function migrated from globals.h - TODO: move this into setup_local eventually
-void init_globals()
-{
-    nm = 2 + (1 << lm);
-    nv = (2 + (1 << ndim1)) * (2+ (1<<ndim2)) * (2+(1<<ndim3));
-    nm2 = 2*nm*nm;
-    nr = 8 * (nv+nm*nm+5*nm+7*lm)/7; // = upper bound for sum_i (n_i+2)^3
-    m = nm+1;
-}
 
 //original setup function- allocates the grid variables
 void setup(int *n1, int *n2, int *n3, grid_t* grid)
@@ -51,6 +19,13 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	int size1=3, size2=10;
 	int *mi = malloc(sizeof(int)*size1*size2);
 	int *ng = malloc(sizeof(int)*size1*size2);
+	
+	//old init globals function
+	nm = 2 + (1 << lm);
+	nv = (2 + (1 << ndim1)) * (2+ (1<<ndim2)) * (2+(1<<ndim3));
+	nm2 = 2*nm*nm;
+	nr = 8 * (nv+nm*nm+5*nm+7*lm)/7; // = upper bound for sum_i (n_i+2)^3
+	m = nm+1;
 
 	ng[  (lt-1)*size1]=nx[lt-1];
 	ng[1+(lt-1)*size1]=ny[lt-1];

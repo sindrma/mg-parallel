@@ -4,7 +4,7 @@
 	-start parallelizing the "v" cycle
 
 	-=Command Line=-
-	mpirun -np 2 ./mg -n 256
+	mpirun -np 2 ./mg -n 64
 	parameter options:
 	-s	: seed
 	-n	: problem size
@@ -16,6 +16,7 @@
 #include "functions/setup.h"
 #include "functions/results.h"
 #include "random.h"
+#include "utility.h"
 #include "timer.h"
 #include "ptools_ppf.h"
 #include "mg.h"
@@ -46,26 +47,19 @@ int main(int argc, const char **argv)
 	MPI_Comm_rank( MPI_COMM_WORLD, &mpi_rank );
 	MPI_Comm_size( MPI_COMM_WORLD, &mpi_size );
 	
-	init_globals();
-	
 	//k is the current level. It is passed down through subroutine args and is NOT global. 
 	//it is the current iteration.
 	int k, it;
-	double tinit, mflops = 0;
 	//pointers of pointers in 3-D
 	REAL**** u, //approximation matrix
 		**** r, //residual error matrix
 		***  v, //values matrix
 		a[4], c[4]; //what are these used for?
 	
-	double rnm2, epsilon;
+	double rnm2, tinit;
 	int n1, n2, n3, nit;
-	double verify_value;
-	bool verified;
 	int i;
-
-	char *t_names[16]; //Timer names
-		
+	
 	init_timers();
 	timer_start(T_init);
 	
@@ -80,7 +74,7 @@ int main(int argc, const char **argv)
 	nz[lt-1] = global_params->n_size;
 	Class = global_params->class;
 	
-	//set a and b matrices using the class value
+	//set a and b matrices for smoother using the class value
 	set_a(a,global_params);
 	set_c(c,global_params);
 	
@@ -150,9 +144,6 @@ int main(int argc, const char **argv)
 	return 0;
 }
 
-//setup function - FLAGGED
-//NOTE: this is what creates the error in the first place
-
 void gen_v(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
 {
     //---------------------------------------------------------------------
@@ -180,7 +171,7 @@ void gen_v(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
     free(j3);
     
 
-    comm3(z,n1,n2,n3);      
+    comm3(z,n1,n2,n3);
 }
 
 void zran3(REAL ***z,int n1,int n2,int n3,int nx,int ny,int* j1,int* j2,int* j3,int *m1, int *m0, int mm, grid_t* grid){
@@ -444,6 +435,8 @@ void gen_v_orig(REAL ***z,int n1,int n2,int n3,int nx,int ny, grid_t* grid){
     
     m1 = i1+1;
     m0 = i0+1;
+    printf("m1=%d\n", m1);
+    printf("m0=%d\n", m0);
     #pragma omp parallel for private(i1,i2,i3)
     for(i3=0;i3<n3;i3++)
         for(i2=0;i2<n2;i2++)
