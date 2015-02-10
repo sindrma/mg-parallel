@@ -2,9 +2,16 @@
 #define __MG__H_
 
 #include "types.h"
-#include "utility.h"
+#include "includes.h"
 
-void setup(int *n1, int *n2, int *n3, grid_t* grid);
+
+// generate mm number of random global indeces
+void zran3(REAL ***z,int n1,int n2,int n3,int nx,int ny,int* j1,int* j2,int* j3,int *m1, int *m0, int mm, grid_t* grid);
+// generate the v vector of A*u = v
+void gen_v(REAL ***z,int n1,int n2,int n3,int nx,int ny, grid_t* grid);
+// The original zran3 function.
+void gen_v_orig(REAL ***z,int n1,int n2,int n3,int nx,int ny, grid_t* grid);
+
 int getInputPars();
 void resid(REAL ***u, REAL*** v, REAL*** r, int n1,int n2,int n3, double a[4]);
 void mg3P(REAL ****u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,int n2,int n3);
