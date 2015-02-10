@@ -15,7 +15,7 @@
 #ifndef _PTOOLS_PPF_H
 #define _PTOOLS_PPF_H
 
-#include "mpi.h"
+#include <mpi.h>
 
 #define PPF_MAXLINE 256
 

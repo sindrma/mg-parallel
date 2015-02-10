@@ -1,5 +1,4 @@
 #include "results.h"
-#include "utility.h"
 
 void init_results(results_t* res)
 {
