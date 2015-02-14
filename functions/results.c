@@ -64,7 +64,9 @@ void set_results(results_t* res, const char* bname, char CLSS, int bn1, int bn2,
 	res->numthreads=num_threads;
 }
 
-void interpret_results(double rnm2,struct params* global, results_t* res, double tm){
+void interpret_results(double rnm2,struct params* global, double tm){
+	results_t res;
+	
 	bool verified = 0;
 	double verify_value = 0.0;
 	double epsilon = 1.0E-8;
@@ -101,7 +103,7 @@ void interpret_results(double rnm2,struct params* global, results_t* res, double
 	}
 	
 	set_results(
-		res, 
+		&res, 
 		"MG",
 		global->class,
 		global->n_size,
@@ -115,7 +117,7 @@ void interpret_results(double rnm2,struct params* global, results_t* res, double
 		omp_get_max_threads()
 	);
 
-	print_results(res, stdout);
+	print_results(&res, stdout);
 }
 
 //OLD MPI CODE

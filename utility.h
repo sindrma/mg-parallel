@@ -10,6 +10,11 @@
 //bubble does a bubble sort in direction dir
 void bubble(double ten[],int j1[],int j2[],int j3[],int m,int ind );
 
+REAL ** exchange_data(REAL** data,int size);
+REAL ** getGhostCells(REAL*** mat,int x,int y,int z);
+REAL *** splitMatrix(REAL*** mat,int x,int y,int z, int processorID);
+REAL * flattenMatrix(REAL*** mat,int x,int y,int z);
+
 double TestNorm(double r[],int n1,int n2,int n3);
 
 //Fill the 3-dimensional array z with zeroes

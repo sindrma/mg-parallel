@@ -1,5 +1,5 @@
 //C standard library include files
-
+#include "ptools_ppf.h"
 //Need this defined in order to get the function definitions of some non-standard functions (e.g. strdup)
 #define _XOPEN_SOURCE 1000
 
@@ -61,7 +61,6 @@
 	//---------------------------------------------------------------------
 	//  Set at m=1024, can handle cases up to 1024^3 case
 	//---------------------------------------------------------------------
-	bool timeron;
 
 	//Timer IDs
 	const int T_total,  T_init,  T_bench,  T_mg3P,
@@ -73,10 +72,14 @@
 		int n_size;	//size of the cube
 		int n_it;	//number of iterations
 		int lt;		//threads requested? not sure if this is correct
+		int mpi_size;	//# of processors available
+		int mpi_rank;	//processor id
 		double seed;	//seed used to generate random indices
 		char class;	//class of test- legacy code
 		int geometry[3];//geometry of how the data is split - *UNIMPLEMENTED*
 	};
+	
+	struct params *global_params;
 	
 	//Represents the benchmark results
 	typedef struct results_s

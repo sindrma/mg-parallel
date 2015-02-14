@@ -14,7 +14,7 @@ const int T_total=0,  T_init=1,  T_bench=2,  T_mg3P=3,
 void setup(int *n1, int *n2, int *n3, grid_t* grid)
 {
 	int j, k;
-
+	
 	int ax;
 	int size1=3, size2=10;
 	int *mi = malloc(sizeof(int)*size1*size2);
@@ -26,7 +26,7 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	nm2 = 2*nm*nm;
 	nr = 8 * (nv+nm*nm+5*nm+7*lm)/7; // = upper bound for sum_i (n_i+2)^3
 	m = nm+1;
-
+	
 	ng[  (lt-1)*size1]=nx[lt-1];
 	ng[1+(lt-1)*size1]=ny[lt-1];
 	ng[2+(lt-1)*size1]=nz[lt-1];
@@ -34,13 +34,13 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	for(ax=0;ax<size1;ax++)
 		for(k=lt-2;k>=0;k--)
 			ng[ax+k*size1]=ng[ax+(k+1)*size1]/2;
-
+	
 	for(k=lt-2;k>=0;k--) {
 		nx[k]=ng[  k*size1];
 		ny[k]=ng[1+k*size1];
 		nz[k]=ng[2+k*size1];
 	}
-
+	
 	for(k=lt-1;k>=0;k--) {
 		for(ax=0;ax<size1;ax++) {
 			mi[ax+k*size1] = 2 + ng[ax+k*size1];
@@ -49,7 +49,7 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 		m2[k]=mi[1+k*size1];
 		m3[k]=mi[2+k*size1];
 	}
-
+	
 	k = lt-1;
 	grid->is1 = 2 + ng[k*size1] - ng[k*size1];
 	grid->ie1 = 1 + ng[k*size1];
@@ -59,8 +59,9 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	*n2= 3 + grid->ie2 - grid->is2;
 	grid->is3 = 2 + ng[2+k*size1] - ng[2+k*size1];
 	grid->ie3 = 1 + ng[2+k*size1];
-	*n3= 3 + grid->ie3 - grid->is3;
-
+	//NOTE: we are splitting the data into strips
+	*n3= (3 + grid->ie3 - grid->is3);
+	
 	ir[lt-1]=0;
 	for(j = lt-2;j>=0;j--) {
 		ir[j]=ir[j+1]+m1[j+1]*m2[j+1]*m3[j+1];
@@ -82,6 +83,8 @@ struct params* setup_local(int argc, const char **argv)
 	p->lt 		= 8;
 	p->seed		= 314159265.0;
 	p->class	= 'U';
+	MPI_Comm_rank( MPI_COMM_WORLD, &p->mpi_rank );
+	MPI_Comm_size( MPI_COMM_WORLD, &p->mpi_size );
 	//todo: add geometry parameters
 	
 	//check command line input for manual entry
@@ -97,6 +100,7 @@ struct params* setup_local(int argc, const char **argv)
 				printf ("error - not an integer");
 			}
 		}
+		//TODO : add lt>maxlevel check (it's in the original code)
 		if (strcmp(argv[nArg],"-lt") == 0) {
 			if (sscanf (argv[nArg + 1], "%i", &p->lt)!=1) {
 				printf ("error - not an integer");
@@ -121,6 +125,12 @@ struct params* setup_local(int argc, const char **argv)
 		p->class = 'C';
 	else if( p->n_size==256 && p->n_it==4 )
 		p->class = 'A';
+	
+	
+	//print function-
+	printf(" NAS Parallel Benchmarks C version\n");
+	printf(" Multithreaded Version %s.%c np=%d\n", "MG", p->class, omp_get_max_threads());
+	printf(" Size:  %dx%dx%d\n Iterations:   %d\n", p->n_size, p->n_size, p->n_size, p->n_it );
 	
 	return p;
 }

@@ -1,8 +1,98 @@
 #include <assert.h>
 #include "utility.h"
 
+//even processors send data first and then receive while odd ones are in the other order.
+REAL ** exchange_data(REAL** data,int size){
+	REAL ** messages = (REAL**) malloc(sizeof(REAL**)*2);
+	messages[0] = (REAL*) malloc(sizeof(REAL*)*size);
+	messages[1] = (REAL*) malloc(sizeof(REAL*)*size);
+	if(global_params->mpi_rank%2 == 0){
+		if(global_params->mpi_rank != 0){
+			//send left data
+			MPI_Send(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, 1, MPI_COMM_WORLD);
+			//receive left data
+			MPI_Recv(messages[0],size,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		}
+		if(global_params->mpi_rank != (global_params->mpi_size - 1)){
+			//send right data
+			MPI_Send(data[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD);
+			//receive right data
+			MPI_Recv(messages[1],size,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		}
+	} else {
+		//receive left data
+		MPI_Recv(messages[0],size,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		//send left data
+		MPI_Send(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, 1, MPI_COMM_WORLD);
+		if(global_params->mpi_rank != (global_params->mpi_size - 1)){
+			//receive right data
+			MPI_Recv(messages[1],size,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			//send right data
+			MPI_Send(data[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD);
+		}
+	}
+	return messages;
+}
 
+//returns the ghost cells for a matrix (so that they can be sent to neigbor processors)
+//currently returns front and back planes-
+REAL ** getGhostCells(REAL*** mat,int x,int y, int z){
+	int i2,i1;
+	int offset = x*y; //plane size
+	//in strips the ghost cells consists of two planes
+	REAL ** ghost_cells = (REAL**) malloc(sizeof(REAL*)*2);
+	ghost_cells[0] = (REAL*) malloc(sizeof(REAL)*offset);
+	ghost_cells[1] = (REAL*) malloc(sizeof(REAL)*offset);
+	
+	//note: the matrix is already padded with boundary data so it must be offset by 1
+	for(i2=1;i2<y;i2++){
+		for(i1=1;i1<x;i1++){
+			//get first plane
+			ghost_cells[0][i2*x + i1] = mat[0][i2][i1];
+			//get last plane
+			ghost_cells[1][i2*x + i1] = mat[z-1][i2][i1];
+		}
+	}
+	
+	return ghost_cells;
+}
 
+// REAL ** splitMatrix
+//given a 3d matrix, returns the strip that a processor should have
+REAL *** splitMatrix(REAL*** mat,int x,int y,int z, int processorID){
+	int i3,i2,i1;
+	int offset = (z/global_params->mpi_size) * processorID;
+	//allocate 3D strip matrix
+	printf(" split Values:  %dx%dx%d\n ", x, y, z );
+	REAL*** strip = alloc3D(x,y,z);
+	
+	for(i3=0;i3<z/global_params->mpi_size;i3++){
+		for(i2=0;i2<y;i2++){
+			for(i1=0;i1<x;i1++){
+				strip[i3][i2][i1] = mat[i3 + offset][i2][i1];
+			}
+		}
+	}
+	return strip;
+}
+
+/*flatten function: 
+	Given matrix pointer, x,y,z sizes, return 1D matrix
+*/
+REAL * flattenMatrix(REAL*** mat,int x,int y,int z){
+	REAL * data = (REAL*) malloc(sizeof(REAL)*x*y*z);
+	printf(" flat Values:  %dx%dx%d\n ", x, y, z );
+	int i3,i2,i1;
+	//map 3D matrix to 1D
+	for(i3=0;i3<z;i3++){
+		for(i2=0;i2<y;i2++){
+			for(i1=0;i1<x;i1++){
+				data[i3*x*y + i2*x + i1] = mat[i3][i2][i1];
+			}
+		}
+	}
+	return data;
+}
 
 double TestNorm(double r[],int n1,int n2,int n3)
 {
