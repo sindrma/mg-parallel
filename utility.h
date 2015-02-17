@@ -10,9 +10,11 @@
 //bubble does a bubble sort in direction dir
 void bubble(double ten[],int j1[],int j2[],int j3[],int m,int ind );
 
+REAL *** merge_matrices(REAL*** mat1, REAL *** mat2,int x1, int y1, int z1, int x2, int y2, int z2, bool buffer);
 REAL ** exchange_data(REAL** data,int size);
 REAL ** getGhostCells(REAL*** mat,int x,int y,int z);
-REAL *** splitMatrix(REAL*** mat,int x,int y,int z, int processorID);
+REAL *** splitMatrix(REAL*** mat,int x,int y,int z, int processorID, int size,bool addBuffer);
+REAL *** unflattenMatrix(REAL* mat,int x,int y,int z);
 REAL * flattenMatrix(REAL*** mat,int x,int y,int z);
 
 double TestNorm(double r[],int n1,int n2,int n3);

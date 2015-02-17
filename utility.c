@@ -1,6 +1,31 @@
 #include <assert.h>
 #include "utility.h"
 
+//merges striped matrices together
+REAL *** merge_matrices(REAL*** mat1, REAL *** mat2,int x1, int y1, int z1, int x2, int y2, int z2, bool buffer){
+	int start = buffer ? 1 : 0; //offfset by 1 if there is a buffer
+	//only expands in the z dimension
+	REAL *** result = alloc3D((x1),(y1),(z1+z2));
+	int i1,i2,i3;
+	//copy matrix 1
+	for(i3=buffer;i3<(z1);i3++){
+		for(i2=buffer;i2<(y1-buffer);i2++){
+			for(i1=buffer;i1<(x1-buffer);i1++){
+				result[i3][i2][i1] = mat1[i3][i2][i1];
+			}
+		}
+	}
+	//copy matrix 2
+	for(i3=z1;i3<(z1+z2-buffer);i3++){
+		for(i2=buffer;i2<(y1-buffer);i2++){
+			for(i1=buffer;i1<(x1-buffer);i1++){
+				result[i3][i2][i1] = mat2[i3 - z1 + buffer][i2][i1];
+			}
+		}
+	}
+	return result;
+}
+
 //even processors send data first and then receive while odd ones are in the other order.
 REAL ** exchange_data(REAL** data,int size){
 	REAL ** messages = (REAL**) malloc(sizeof(REAL**)*2);
@@ -45,8 +70,8 @@ REAL ** getGhostCells(REAL*** mat,int x,int y, int z){
 	ghost_cells[1] = (REAL*) malloc(sizeof(REAL)*offset);
 	
 	//note: the matrix is already padded with boundary data so it must be offset by 1
-	for(i2=1;i2<y;i2++){
-		for(i1=1;i1<x;i1++){
+	for(i2=0;i2<y;i2++){
+		for(i1=0;i1<x;i1++){
 			//get first plane
 			ghost_cells[0][i2*x + i1] = mat[0][i2][i1];
 			//get last plane
@@ -59,21 +84,48 @@ REAL ** getGhostCells(REAL*** mat,int x,int y, int z){
 
 // REAL ** splitMatrix
 //given a 3d matrix, returns the strip that a processor should have
-REAL *** splitMatrix(REAL*** mat,int x,int y,int z, int processorID){
+//has the option to maintain boundary points on the result matrix
+//TODO : current split values: 258x258x129- should this be 258x258x130?=
+REAL *** splitMatrix(REAL*** mat,int x,int y,int z,int processorID,int size,bool addBuffer){
 	int i3,i2,i1;
-	int offset = (z/global_params->mpi_size) * processorID;
+	int offset = (z/size) * processorID;
 	//allocate 3D strip matrix
-	printf(" split Values:  %dx%dx%d\n ", x, y, z );
-	REAL*** strip = alloc3D(x,y,z);
+	// printf(" split Values:  %dx%dx%d\n ", x, y, z );
+	//add padding on both indexes if required
+	//don't need to add padding for first and last indices (already there)
+	int endOffset = ((processorID != (size-1) || !addBuffer) ? 0 : 1);
+	int startOffset = (processorID != 0 || !addBuffer ? 0 : 1);
+	int padding = addBuffer ?
+		(
+			((processorID != (size-1)) ? 1 : 0)
+			+ (processorID != 0 ? 1 : 0)
+		) : 0;
 	
-	for(i3=0;i3<z/global_params->mpi_size;i3++){
+	REAL*** strip = alloc3D(x,y,(z/size + padding));
+	
+	for(i3=startOffset;i3<(z/size)-endOffset;i3++){
 		for(i2=0;i2<y;i2++){
 			for(i1=0;i1<x;i1++){
-				strip[i3][i2][i1] = mat[i3 + offset][i2][i1];
+				strip[i3 + (addBuffer ? 1-startOffset : 0)][i2][i1] = mat[i3 + offset][i2][i1];
 			}
 		}
 	}
 	return strip;
+}
+//opposite of flatten matrix
+REAL *** unflattenMatrix(REAL* mat,int x,int y,int z){
+	REAL *** data = alloc3D(x,y,z);
+	int i3,i2,i1;
+	// printf(" unflat Values:  %dx%dx%d\n ", x, y, z );
+	//map 3D matrix to 1D
+	for(i3=0;i3<z;i3++){
+		for(i2=0;i2<y;i2++){
+			for(i1=0;i1<x;i1++){
+				data[i3][i2][i1] = mat[i3*x*y + i2*x + i1];
+			}
+		}
+	}
+	return data;
 }
 
 /*flatten function: 
@@ -81,7 +133,7 @@ REAL *** splitMatrix(REAL*** mat,int x,int y,int z, int processorID){
 */
 REAL * flattenMatrix(REAL*** mat,int x,int y,int z){
 	REAL * data = (REAL*) malloc(sizeof(REAL)*x*y*z);
-	printf(" flat Values:  %dx%dx%d\n ", x, y, z );
+	// printf(" flat Values:  %dx%dx%d\n ", x, y, z );
 	int i3,i2,i1;
 	//map 3D matrix to 1D
 	for(i3=0;i3<z;i3++){

@@ -47,7 +47,7 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 		}
 		m1[k]=mi[  k*size1];
 		m2[k]=mi[1+k*size1];
-		m3[k]=mi[2+k*size1];
+		m3[k]=(mi[2+k*size1] -2 ) / global_params->mpi_size + 2;
 	}
 	
 	k = lt-1;
@@ -60,11 +60,21 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	grid->is3 = 2 + ng[2+k*size1] - ng[2+k*size1];
 	grid->ie3 = 1 + ng[2+k*size1];
 	//NOTE: we are splitting the data into strips
+	//global_params->mpi_size
+	// printf ("IE3: %d, IS3: %d \n",grid->ie3, grid->is3);
 	*n3= (3 + grid->ie3 - grid->is3);
+	// printf ("N3: %d \n",*n3);
 	
 	ir[lt-1]=0;
 	for(j = lt-2;j>=0;j--) {
 		ir[j]=ir[j+1]+m1[j+1]*m2[j+1]*m3[j+1];
+	}
+	
+	//MPI SETUP
+	// *n3= (*n3 - 2) / global_params->mpi_size + 2;
+	for(k=0;k<lt;k++) {
+		nz[k] = nz[k] / global_params->mpi_size;
+		// printf ("nz : %d \n",nz[k]);
 	}
 
 	free(mi);
@@ -85,7 +95,6 @@ struct params* setup_local(int argc, const char **argv)
 	p->class	= 'U';
 	MPI_Comm_rank( MPI_COMM_WORLD, &p->mpi_rank );
 	MPI_Comm_size( MPI_COMM_WORLD, &p->mpi_size );
-	//todo: add geometry parameters
 	
 	//check command line input for manual entry
 	for (nArg=1; nArg < argc; nArg+=2){
@@ -100,10 +109,13 @@ struct params* setup_local(int argc, const char **argv)
 				printf ("error - not an integer");
 			}
 		}
-		//TODO : add lt>maxlevel check (it's in the original code)
+		
 		if (strcmp(argv[nArg],"-lt") == 0) {
 			if (sscanf (argv[nArg + 1], "%i", &p->lt)!=1) {
 				printf ("error - not an integer");
+			} else {
+				//TODO : add lt>maxlevel check (it's in the original code)
+				
 			}
 		}
 		if (strcmp(argv[nArg],"-s") == 0) {
@@ -113,8 +125,8 @@ struct params* setup_local(int argc, const char **argv)
 		}
 		
 	}
+	
 	//determine class of test
-	//TODO : make this obsolete- this could be done better
 	if( p->n_size==32 && p->n_it==4 )
 		p->class = 'S';
 	else if( p->n_size==64 && p->n_it==40 )
@@ -126,11 +138,12 @@ struct params* setup_local(int argc, const char **argv)
 	else if( p->n_size==256 && p->n_it==4 )
 		p->class = 'A';
 	
-	
 	//print function-
-	printf(" NAS Parallel Benchmarks C version\n");
-	printf(" Multithreaded Version %s.%c np=%d\n", "MG", p->class, omp_get_max_threads());
-	printf(" Size:  %dx%dx%d\n Iterations:   %d\n", p->n_size, p->n_size, p->n_size, p->n_it );
+	if(p->mpi_rank == 0){
+		printf("\n NAS Parallel Benchmarks C version\n");
+		printf(" Multithreaded Version %s.%c np=%d\n", "MG", p->class, omp_get_max_threads());
+		printf(" Size:  %dx%dx%d\n Iterations:   %d\n", p->n_size, p->n_size, p->n_size, p->n_it );
+	}
 	
 	return p;
 }
