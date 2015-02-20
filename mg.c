@@ -72,8 +72,10 @@ int main(int argc, const char **argv)
 	gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
 	
 	//Initialize arrays- currently does this in strips
-	u = allocGrids(lt, n1-2, n2-2, (n3-2) / global_params->mpi_size, 2);
-	r = allocGrids(lt, n1-2, n2-2, (n3-2) / global_params->mpi_size, 2);
+	//Issue: currently the extra "+2" is required to make it stay in bounds- why isn't it large enough without it?
+	u = allocGrids(lt, n1-2, n2-2, ((n3-2) / global_params->mpi_size + 2 + 2), 2);
+	r = allocGrids(lt, n1-2, n2-2, ((n3-2) / global_params->mpi_size + 2 + 2 ), 2);
+	
 	zero3(u[0],n1,n2,n3 / global_params->mpi_size); //zero-out all of u
 	
 	//create local v (for residual)
@@ -82,11 +84,12 @@ int main(int argc, const char **argv)
 		n1,n2,n3, //matrix size
 		global_params->mpi_rank,
 		global_params->mpi_size,
-		true //result matrix should have a 1 cell boundary buffer
+		false //don't put a buffer on this!
 	);
 	
 	timer_stop(T_init);
 	timer_start(T_bench);
+	
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	
 	//each processor runs the multigrid algorithm
@@ -99,6 +102,7 @@ int main(int argc, const char **argv)
 	} 
 	
 	//processor 1 interprets results
+	//TODO : test/correct and verify this works.  Also needs to handle more than just 2 processors case
 	if(global_params->mpi_rank == 0){
 		timer_stop(T_bench);
 		tinit = timer_elapsed(T_init);
@@ -125,7 +129,6 @@ int main(int argc, const char **argv)
 
 		//validates the results and prints to console
 		interpret_results(rnm2, global_params, tm);
-		
 	} else {
 	// 	//send residual result
 	// 	REAL * message = flattenMatrix(r[0],n1,n2,(n3));
@@ -460,73 +463,73 @@ double norm2u3(REAL*** r,int n1,int n2,int n3, int nx,int ny,int nz)
 void resid(REAL ***u, REAL*** v, REAL*** r,
            int n1,int n2,int n3, double a[4])
 {
-    //NOTE: Au = v - r
-    //---------------------------------------------------------------------
-    //     resid computes the residual:  r = v - Au
-    //   
-    //     This  implementation costs  15A + 4M per result, where
-    //     A and M denote the costs of Addition (or Subtraction) and 
-    //     Multiplication, respectively. 
-    //     Presuming coefficient a(1) is zero (the NPB assumes this,
-    //     but it is thus not a general case), 3A + 1M may be eliminated,
-    //     resulting in 12A + 3M.
-    //     Note that this vectorizes, and is also fine for cache 
-    //     based machines.  
-    //---------------------------------------------------------------------
-    int i3, i2, i1;
-
-    static bool init = false;
-
-    //Private arrays for each thread
-    static double **_u1;
-    static double **_u2;
-    
-    double *u1, *u2;
-
-    if (!init) {
-        _u1 = (REAL**)malloc(sizeof(REAL*)*omp_get_max_threads()); 
-        _u2 = (double**)malloc(sizeof(REAL*)*omp_get_max_threads());
-        for (i1 = 0; i1 < omp_get_max_threads(); i1++) {
-            _u1[i1] = malloc(sizeof(REAL)*(nm+1));
-            _u2[i1] = malloc(sizeof(REAL)*(nm+1));
-        }
-        init = true;
-    }
-
-    #pragma omp parallel private(i1,i2,i3,u1,u2)
-    {
-        u1 = _u1[omp_get_thread_num()];
-        u2 = _u2[omp_get_thread_num()];
-
+	//NOTE: Au = v - r
+	//---------------------------------------------------------------------
+	//     resid computes the residual:  r = v - Au
+	//   
+	//     This  implementation costs  15A + 4M per result, where
+	//     A and M denote the costs of Addition (or Subtraction) and 
+	//     Multiplication, respectively. 
+	//     Presuming coefficient a(1) is zero (the NPB assumes this,
+	//     but it is thus not a general case), 3A + 1M may be eliminated,
+	//     resulting in 12A + 3M.
+	//     Note that this vectorizes, and is also fine for cache 
+	//     based machines.  
+	//---------------------------------------------------------------------
+	int i3, i2, i1;
+	
+	static bool init = false;
+	
+	//Private arrays for each thread
+	static double **_u1;
+	static double **_u2;
+	
+	double *u1, *u2;
+	
+	// printf("\nn1: %d \nn2: %d \n n3:%d",n1,n2,n3);
+	
+	if (!init) {
+		_u1 = (REAL**)malloc(sizeof(REAL*)*omp_get_max_threads()); 
+		_u2 = (double**)malloc(sizeof(REAL*)*omp_get_max_threads());
+		for (i1 = 0; i1 < omp_get_max_threads(); i1++) {
+			_u1[i1] = malloc(sizeof(REAL)*(nm+1));
+			_u2[i1] = malloc(sizeof(REAL)*(nm+1));
+		}
+		init = true;
+	}
+	u1 = _u1[omp_get_thread_num()];
+	u2 = _u2[omp_get_thread_num()];
 	//cycles through each dimension
-        #pragma omp for
-        for(i3=1;i3<n3-1;i3++) {
-            for(i2=1;i2<n2-1;i2++) {
-                for(i1=0;i1<n1;i1++) {
-                    u1[i1] = u[i3][i2-1][i1]   + u[i3][i2+1][i1] 
-                           + u[i3-1][i2][i1]   + u[i3+1][i2][i1];
-                    u2[i1] = u[i3-1][i2-1][i1] + u[i3-1][i2+1][i1]
-                           + u[i3+1][i2-1][i1] + u[i3+1][i2+1][i1];
-                }
-                for(i1=1;i1<n1-1;i1++) {
-                    r[i3][i2][i1] = v[i3][i2][i1] 
-                        - a[0] * u[i3][i2][i1]
-                        //---------------------------------------------------------------------
-                        //  Assume a(1) = 0      (Enable 2 lines below if a(1) not= 0)
-                        //---------------------------------------------------------------------
-                        //    >                     - a[1] * ( u(i1-1,i2,i3) + u(i1+1,i2,i3)
-                        //    >                              + u1(i1) )
-                        //---------------------------------------------------------------------
-                        - a[2] * ( u2[i1] + u1[i1-1] + u1[i1+1] )
-                        - a[3] * ( u2[i1-1] + u2[i1+1] );
-                }
-            }
-        }
-    }
-    //---------------------------------------------------------------------
-    //     exchange boundary data
-    //---------------------------------------------------------------------
-    comm3(r,n1,n2,n3);
+	for(i3=1;i3<n3-1;i3++) {
+		for(i2=1;i2<n2-1;i2++) {
+			for(i1=0;i1<n1;i1++) {
+				u1[i1] = u[i3][i2-1][i1]   + u[i3][i2+1][i1] 
+					+ u[i3-1][i2][i1]   + u[i3+1][i2][i1];
+				u2[i1] = u[i3-1][i2-1][i1] + u[i3-1][i2+1][i1]
+					+ u[i3+1][i2-1][i1] + u[i3+1][i2+1][i1];
+			}
+			//issue: x = 8, y = 4, z = 2
+			//first call: all of u is 0
+			//off by 4
+			for(i1=1;i1<n1-1;i1++) {
+				r[i3][i2][i1] = v[i3][i2][i1]
+					- a[0] * u[i3][i2][i1]
+					//---------------------------------------------------------------------
+					//  Assume a(1) = 0      (Enable 2 lines below if a(1) not= 0)
+					//---------------------------------------------------------------------
+					//    >                     - a[1] * ( u(i1-1,i2,i3) + u(i1+1,i2,i3)
+					//    >                              + u1(i1) )
+					//---------------------------------------------------------------------
+					- a[2] * ( u2[i1] + u1[i1-1] + u1[i1+1] )
+					- a[3] * ( u2[i1-1] + u2[i1+1] );
+			
+			}
+		}
+	}
+	//---------------------------------------------------------------------
+	//     exchange boundary data
+	//---------------------------------------------------------------------
+	comm3(r,n1,n2,n3);
 }
 
 //Multigrid 3-Dimensions function
@@ -542,17 +545,19 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//     down cycle.
 	//     restrict the residual from the fine grid to the coarse
 	//---------------------------------------------------------------------
+	if(global_params->mpi_rank != 0 && n1 == 10){
+		printf("\nCOARSENING MESH, %d,%d,%d\n",n1,n2,n3);
+	}
 	for(k=lt-1-restriction;k>=1;k--) {
 		j = k-1;
-		// rprj3(
-		// 	r[lt-1-k],		//current level residual
-		// 	m1[k],m2[k],m3[k],	//current level m-values
-		// 	r[lt-1-j],		//next level residual
-		// 	m1[j],m2[j],m3[j]	//next level m-values
-		// );
-		printf ("M1k: %d, M2k: %d, M3k: %d \n",m1[k],m2[k],m3[k]);
 		rprj3_mpi(r[lt-1-k],m1[k],m2[k],m3[k],r[lt-1-j],m1[j],m2[j],m3[j]);
+		//print matrix
+		if(global_params->mpi_rank != 0 && n1 == 10){
+			printf("K=%d -- %d,%d,%d\n",k,m1[k],m2[k],m3[k]);
+			printMatrix(r[lt-1-k],m1[k],m2[k],m3[k]);
+		}
 	}
+	
 	
 	k = 0;
 	//---------------------------------------------------------------------
@@ -603,18 +608,22 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 	int receiveCount = 2;
 	
 	
-	// REAL ** ghost_data = getGhostCells(r,m1k-2,m2k-2,(m3k-2));
-	// int messageSize = (m1k-2)*(m2k-2);
-	// 
-	// //send the ghost cell data to neighbor processors
-	// REAL ** results = exchange_data(ghost_data,messageSize);
-	// //TODO : does not seem correct?
-	// for (i2 = 1; i2 < m1k-2; i2++) {
-	// 	for (i1 = 1; i1 < m2k-2; i1++) {
-	// 		r[0][i2][i1] = results[0][(m1k-2)*i2 + i1];
-	// 		r[m3k][i2][i1] = results[1][(m1k-2)*i2 + i1];
-	// 	}
-	// }
+	REAL ** ghost_data = getGhostCells(r,m1k,m2k,m3k);
+	//just send the x*y planes- not including the buffer
+	int messageSize = (m1k-2)*(m2k-2);
+	REAL ** results = exchange_data(ghost_data,messageSize);
+	
+	//put results into the r matrix
+	for (i2 = 1; i2 < m1k-2; i2++) {
+		for (i1 = 1; i1 < m2k-2; i1++) {
+			if(global_params->mpi_rank != 0 ){
+				r[0][i2][i1] = results[0][(m1k-2)*i2 + i1];
+			}
+			if(global_params->mpi_rank != global_params->mpi_size - 1 ){
+				r[m3k-1][i2][i1] = results[1][(m1k-2)*i2 + i1];
+			}
+		}
+	}
 	
 	//this seems to be incorrect - (it's larger than necessary)
 	//it initializes for the largest possible array needed (finest level), instead of adjusting to the current level size
@@ -635,21 +644,25 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 				y1[i1-1] = r[i3-1][i2-1][i1-1] + r[i3+1][i2-1][i1-1] 
 					+ r[i3-1][i2+1][i1-1] + r[i3+1][i2+1][i1-1];
 			}
-			
+			//coarsen: average of neighbors (with weights)
 			for(j1=2;j1<=m1j-1;j1++) {
 				i1 = 2*j1-d1-1;
+				//gets the corner points
 				y2 = r[i3-1][i2-1][i1]  + r[i3+1][i2-1][i1] 
 					+ r[i3-1][i2+1][i1] + r[i3+1][i2+1][i1];
+				//x2 is 4 of the nearest neighbors (why separate this from other 2?)
 				x2 = r[i3][i2-1][i1]    + r[i3][i2+1][i1]
 					+ r[i3-1][i2][i1]   + r[i3+1][i2][i1];
+				//NOTE: only maps to inner (non-buffer) part of the next level
 				s[j3-1][j2-1][j1-1] =
-					0.5      *   r[i3][i2][i1]
-					+ 0.25   * ( r[i3][i2][i1-1]+r[i3][i2][i1+1]+x2)
+					0.5      *   r[i3][i2][i1]	//center point
+					+ 0.25   * ( r[i3][i2][i1-1]+r[i3][i2][i1+1]+x2) //6 nearest neighbors
 					+ 0.125  * ( x1[i1-1] + x1[i1+1] + y2)
 					+ 0.0625 * ( y1[i1-1] + y1[i1+1] );
 			}
 		}
 	}
+	//TODO : verify this
 	comm3(s,m1j,m2j,m3j);
 }
 
@@ -1132,37 +1145,70 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 //---------------------------------------------------------------------
 //     comm3 organizes the communication on all borders 
 //---------------------------------------------------------------------
-    int i1, i2, i3;
-
-    #pragma omp parallel private(i1,i2,i3)
-    {
-        #pragma omp for
-        for(i3=1;i3<n3-1;i3++) {
-            for(i2=1;i2<n2-1;i2++) {
-                u[i3][i2][0] = u[i3][i2][n1-2];
-                u[i3][i2][n1-1] = u[i3][i2][1];
-            }
-        }
-
-        for(i3=1;i3<n3-1;i3++)
-        {
-            for(i1=0;i1<n1;i1++)
-            {
-                u[i3][0][i1] = u[i3][n2-2][i1];
-                u[i3][n2-1][i1]  = u[i3][1][i1];
-            }
-        }
-
-		//TODO : this doesn't look like it'll work in multiple processors
-        #pragma omp for nowait
-        for(i2=0;i2<n2;i2++)
-        {
-            for(i1=0;i1<n1;i1++)
-            {
-                u[0][i2][i1] = u[n3-2][i2][i1];
-                u[n3-1][i2][i1] = u[1][i2][i1];
-            }
-        }
-
-    }
+	int i1, i2, i3;
+	for(i3=1;i3<n3-1;i3++) {
+		for(i2=1;i2<n2-1;i2++) {
+			u[i3][i2][0] = u[i3][i2][n1-2];
+			u[i3][i2][n1-1] = u[i3][i2][1];
+		}
+	}
+	
+	for(i3=1;i3<n3-1;i3++)
+	{
+		for(i1=0;i1<n1;i1++)
+		{
+			u[i3][0][i1] = u[i3][n2-2][i1];
+			u[i3][n2-1][i1]  = u[i3][1][i1];
+		}
+	}
+	//Exchange first and last xy-planes between processors
+	if(global_params->mpi_size == 1){
+		for(i2=0;i2<n2;i2++) {
+			for(i1=0;i1<n1;i1++) {
+				u[0][i2][i1] = u[n3-2][i2][i1];
+				u[n3-1][i2][i1] = u[1][i2][i1];
+			}
+		}
+	} else {
+		//use mpi to exchange this data
+		if(global_params->mpi_rank == 0 || global_params->mpi_rank == global_params->mpi_size - 1){
+			//Similar call to getGhostCells- might be able to reuse it (offset is not the same though, needs to be tested)
+			REAL * ghost_cells = (REAL*) malloc(sizeof(REAL)*n1*n2);
+			REAL * message = (REAL*) malloc(sizeof(REAL*)*n1*n2);
+			
+			if(global_params->mpi_rank == 0){
+				//get first plane
+				for(i2=0;i2<n2;i2++) {
+					for(i1=0;i1<n1;i1++) {
+						ghost_cells[(i2)*(n1) + i1] = u[1][i2][i1];
+					}
+				}
+				//send/receive front plane
+				MPI_Send(ghost_cells, n1*n2, MPI_DOUBLE, global_params->mpi_size - 1, 1, MPI_COMM_WORLD);
+				MPI_Recv(message,n1*n2,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				
+				for(i2=0;i2<n2;i2++) {
+					for(i1=0;i1<n1;i1++) {
+						u[0][i2][i1] = message[(i2)*(n1) + i1];
+					}
+				}
+			} else {	
+				//get last plane
+				for(i2=0;i2<n2;i2++) {
+					for(i1=0;i1<n1;i1++) {
+						ghost_cells[(i2)*(n1) + i1] = u[n3-2][i2][i1];
+					}
+				}
+				//receive/send back plane
+				MPI_Recv(message,n1*n2,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Send(ghost_cells, n1*n2, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
+				
+				for(i2=0;i2<n2;i2++) {
+					for(i1=0;i1<n1;i1++) {
+						u[n3-1][i2][i1] = message[(i2)*(n1) + i1];
+					}
+				}
+			}
+		}
+	}
 }

@@ -14,6 +14,5 @@ void testMerge(int x,int y,int z,int num_processors,bool buffered);
 void testSplit(int x,int y,int z,int num_processors,bool buffered);
 
 REAL *** generateMatrix(int x,int y,int z, bool buffered);
-void printMatrix(REAL *** mat,int x,int y,int z);
 
 #endif

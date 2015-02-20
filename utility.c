@@ -1,5 +1,25 @@
 #include <assert.h>
 #include "utility.h"
+#include "ptools_ppf.h"
+#include <string.h>
+
+//prints out a 3d matrix
+void printMatrix(REAL *** mat,int x,int y,int z){
+	int i1,i2,i3;
+	for(i3=0;i3<z;i3++){
+		// sprintf (buffer, "\n  z=%d", i3);
+		printf("\n  z=%d", i3);
+		for(i2=0;i2<y;i2++){
+			// sprintf (buffer + strlen(buffer), "\n");
+			printf("\n");
+			for(i1=0;i1<x;i1++){
+				// sprintf (buffer + strlen(buffer), "%f ", mat[i3][i2][i1]);
+				printf("%f ", mat[i3][i2][i1]);
+			}
+		}
+	}
+	// PPF_Print( MPI_COMM_WORLD, buffer );
+}
 
 //merges striped matrices together
 REAL *** merge_matrices(REAL*** mat1, REAL *** mat2,int x1, int y1, int z1, int x2, int y2, int z2, bool buffer){
@@ -63,19 +83,19 @@ REAL ** exchange_data(REAL** data,int size){
 //currently returns front and back planes-
 REAL ** getGhostCells(REAL*** mat,int x,int y, int z){
 	int i2,i1;
-	int offset = x*y; //plane size
+	int offset = (x-2)*(y-2); //plane size
 	//in strips the ghost cells consists of two planes
 	REAL ** ghost_cells = (REAL**) malloc(sizeof(REAL*)*2);
-	ghost_cells[0] = (REAL*) malloc(sizeof(REAL)*offset);
-	ghost_cells[1] = (REAL*) malloc(sizeof(REAL)*offset);
+	ghost_cells[0] = (REAL*) malloc(sizeof(REAL)*offset - 2);
+	ghost_cells[1] = (REAL*) malloc(sizeof(REAL)*offset - 2);
 	
 	//note: the matrix is already padded with boundary data so it must be offset by 1
-	for(i2=0;i2<y;i2++){
-		for(i1=0;i1<x;i1++){
+	for(i2=1;i2<y-1;i2++){
+		for(i1=1;i1<x-1;i1++){
 			//get first plane
-			ghost_cells[0][i2*x + i1] = mat[0][i2][i1];
+			ghost_cells[0][(i2-1)*(x-2) + i1 - 1] = mat[0+1][i2][i1];
 			//get last plane
-			ghost_cells[1][i2*x + i1] = mat[z-1][i2][i1];
+			ghost_cells[1][(i2-1)*(x-2) + i1 - 1] = mat[z-1-1][i2][i1];
 		}
 	}
 	
@@ -86,27 +106,27 @@ REAL ** getGhostCells(REAL*** mat,int x,int y, int z){
 //given a 3d matrix, returns the strip that a processor should have
 //has the option to maintain boundary points on the result matrix
 //TODO : current split values: 258x258x129- should this be 258x258x130?=
+//n1,n2,n3 are input
 REAL *** splitMatrix(REAL*** mat,int x,int y,int z,int processorID,int size,bool addBuffer){
 	int i3,i2,i1;
 	int offset = (z/size) * processorID;
 	//allocate 3D strip matrix
-	// printf(" split Values:  %dx%dx%d\n ", x, y, z );
-	//add padding on both indexes if required
-	//don't need to add padding for first and last indices (already there)
-	int endOffset = ((processorID != (size-1) || !addBuffer) ? 0 : 1);
-	int startOffset = (processorID != 0 || !addBuffer ? 0 : 1);
-	int padding = addBuffer ?
-		(
-			((processorID != (size-1)) ? 1 : 0)
-			+ (processorID != 0 ? 1 : 0)
-		) : 0;
+	int z_size = (z-2)/size+2; //130
 	
-	REAL*** strip = alloc3D(x,y,(z/size + padding));
+	REAL*** strip = alloc3D(x,y,z_size);
 	
-	for(i3=startOffset;i3<(z/size)-endOffset;i3++){
+	int start_o = processorID == size - 1 ? 1 : 2;
+	if(processorID == 0){
+		start_o = 0;
+	}
+	// printf("SIZES: z=%d, y=%d, x=%d",z_size,y,x);
+	// printf("offset=%d, s=%d",offset,start_o);
+	
+	for(i3=0;i3<z_size;i3++){
+		// printf("SIZES: i3=%d",i3);
 		for(i2=0;i2<y;i2++){
 			for(i1=0;i1<x;i1++){
-				strip[i3 + (addBuffer ? 1-startOffset : 0)][i2][i1] = mat[i3 + offset][i2][i1];
+				strip[i3][i2][i1] = mat[i3 + offset - start_o][i2][i1];
 			}
 		}
 	}
