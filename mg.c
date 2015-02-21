@@ -92,8 +92,8 @@ int main(int argc, const char **argv)
 	
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	
-	if(global_params->mpi_rank == 0){
-		printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
+	if(global_params->mpi_rank != 0){
+		// printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
 	}
 	
 	//each processor runs the multigrid algorithm
@@ -521,8 +521,7 @@ void resid(REAL ***u, REAL*** v, REAL*** r,
 	u1 = _u1[omp_get_thread_num()];
 	u2 = _u2[omp_get_thread_num()];
 	//cycles through each dimension
-	//don't do residual on last plane of last slice
-	for(i3=1;i3<n3-(global_params->mpi_rank == global_params->mpi_size - 1 ? 1:0);i3++) {
+	for(i3=1;i3<n3-1;i3++) {
 		for(i2=1;i2<n2-1;i2++) {
 			for(i1=0;i1<n1;i1++) {
 				u1[i1] = u[i3][i2-1][i1]   + u[i3][i2+1][i1] 
@@ -545,6 +544,29 @@ void resid(REAL ***u, REAL*** v, REAL*** r,
 					- a[2] * ( u2[i1] + u1[i1-1] + u1[i1+1] )
 					- a[3] * ( u2[i1-1] + u2[i1+1] );
 			
+			}
+		}
+	}
+	
+	
+	// if(global_params->mpi_rank == 0 && n3 == 6){
+	// 	printMatrix(r,n1,n2,n3);
+	// }
+	
+	// printf("COMM3 %d,%d,%d\n",n1,n2,n3);
+	//exchange boundary data here
+	REAL ** ghost_data = getGhostCells(r,n1,n2,n3);
+	//just send the x*y planes- not including the buffer
+	int messageSize = (n1-2)*(n2-2);
+	REAL ** results = exchange_data(ghost_data,messageSize);
+	//put results into the r matrix
+	for (i2 = 0; i2 < n1-2; i2++) {
+		for (i1 = 0; i1 < n2-2; i1++) {
+			if(global_params->mpi_rank != 0 ){
+				r[0][i2+1][i1+1] = results[0][(n1-2)*i2 + i1];
+			}
+			if(global_params->mpi_rank != global_params->mpi_size - 1 ){
+				r[n3-1][i2+1][i1+1] = results[1][(n1-2)*i2 + i1];
 			}
 		}
 	}
@@ -572,10 +594,8 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	// }
 	for(k=lt-1-restriction;k>=1;k--) {
 		j = k-1;
-		// printf("\nN:%d\n",m1[k]);
+		//TODO : WORKING ON: verify next level
 		rprj3_mpi(r[lt-1-k],m1[k],m2[k],m3[k],r[lt-1-j],m1[j],m2[j],m3[j]);
-		//print matrix
-		//10,6,ect
 		// if(global_params->mpi_rank != 0 && m1[k] == 6){
 		// 	printf("K=%d -- %d,%d,%d\n",k,m1[k],m2[k],m3[k]);
 		// 	printMatrix(r[lt-1-k],m1[k],m2[k],m3[k]);
@@ -637,14 +657,14 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 	int messageSize = (m1k-2)*(m2k-2);
 	REAL ** results = exchange_data(ghost_data,messageSize);
 	
-	//put results into the r matrix
-	for (i2 = 1; i2 < m1k-2; i2++) {
-		for (i1 = 1; i1 < m2k-2; i1++) {
+	// put results into the r matrix
+	for (i2 = 0; i2 < m1k-2; i2++) {
+		for (i1 = 0; i1 < m2k-2; i1++) {
 			if(global_params->mpi_rank != 0 ){
-				r[0][i2][i1] = results[0][(m1k-2)*i2 + i1];
+				r[0][i2+1][i1+1] = results[0][(m1k-2)*i2 + i1];
 			}
 			if(global_params->mpi_rank != global_params->mpi_size - 1 ){
-				r[m3k-1][i2][i1] = results[1][(m1k-2)*i2 + i1];
+				r[m3k-1][i2+1][i1+1] = results[1][(m1k-2)*i2 + i1];
 			}
 		}
 	}
@@ -686,7 +706,6 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 			}
 		}
 	}
-	//TODO : verify this
 	comm3(s,m1j,m2j,m3j);
 }
 
