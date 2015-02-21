@@ -5,6 +5,7 @@
 #include "../utility.h"
 #include "../timer.h"
 #include "mg.h"
+#include "../mg.h"
 
 //mpirun -np 2 ./mg
 //TODO : testExchange isn't correct yet

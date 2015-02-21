@@ -33,5 +33,5 @@ clean:
 	- rm -f functions/*.o
 	- if [ -d rii_files ]; then rm -r rii_files; fi
 
-test: mg
+run: mg
 	./mg
