@@ -29,7 +29,7 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	
 	ng[  (lt-1)*size1]=nx[lt-1];
 	ng[1+(lt-1)*size1]=ny[lt-1];
-	ng[2+(lt-1)*size1]=nz[lt-1];
+	ng[2+(lt-1)*size1]=nz[lt-1]  / global_params->mpi_size;
 
 	for(ax=0;ax<size1;ax++)
 		for(k=lt-2;k>=0;k--)
@@ -68,11 +68,6 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	ir[lt-1]=0;
 	for(j = lt-2;j>=0;j--) {
 		ir[j]=ir[j+1]+m1[j+1]*m2[j+1]*m3[j+1];
-	}
-	
-	//MPI SETUP
-	for(k=0;k<lt;k++) {
-		nz[k] = nz[k] / global_params->mpi_size;
 	}
 
 	free(mi);
