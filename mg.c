@@ -73,8 +73,9 @@ int main(int argc, const char **argv)
 	
 	//Initialize arrays- currently does this in strips
 	//Issue: currently the extra "+2" is required to make it stay in bounds- why isn't it large enough without it?
-	u = allocGrids(lt, n1-2, n2-2, ((n3-2) / global_params->mpi_size + 2 + 2), 2);
-	r = allocGrids(lt, n1-2, n2-2, ((n3-2) / global_params->mpi_size + 2 + 2 ), 2);
+	// printf("N1= %d, N3=%d\n",n1-2,((n3-2) / global_params->mpi_size + 2 + 2));
+	u = allocGrids(lt, n1-2, n2-2, n3-2, 2);
+	r = allocGrids(lt, n1-2, n2-2, n3-2, 2);
 	
 	zero3(u[0],n1,n2,n3 / global_params->mpi_size); //zero-out all of u
 	
@@ -109,37 +110,37 @@ int main(int argc, const char **argv)
 		printf(" Initialization time: %f seconds\n", tinit);
 		
 		//combine r results from each processor
-		// REAL * message = (REAL*) malloc(sizeof(REAL*)*n1*n2*((n3-2)/global_params->mpi_size+2));
-		// MPI_Recv(message,n1*n2*((n3-2)/global_params->mpi_size+2),MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		// 
-		// // unflatten message into 3d matrix
-		// REAL *** strip = unflattenMatrix(message,n1,n2,(n3-2)/global_params->mpi_size+2);
-		// 
-		// //combine results
-		// int i1,i2,i3;
-		// int z_size = (n3-2)/global_params->mpi_size+2;
-		// REAL *** result = alloc3D((n1),(n2),(n3));
-		// //copy results over to result matrix
-		// for(i3=0;i3<(z_size-1);i3++){
-		// 	for(i2=0;i2<n2;i2++){
-		// 		for(i1=0;i1<n1;i1++){
-		// 			result[i3][i2][i1] = r[0][i3][i2][i1];
-		// 		}
-		// 	}
-		// }
-		// //copy matrix 2
-		// for(i3=(z_size);i3<n3+1;i3++){
-		// 	for(i2=0;i2<n2;i2++){
-		// 		for(i1=0;i1<n1;i1++){
-		// 			result[i3-1][i2][i1] = strip[i3 - (z_size-1)][i2][i1];
-		// 		}
-		// 	}
-		// }
+		REAL * message = (REAL*) malloc(sizeof(REAL*)*n1*n2*((n3-2)/global_params->mpi_size+2));
+		MPI_Recv(message,n1*n2*((n3-2)/global_params->mpi_size+2),MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		
+		// unflatten message into 3d matrix
+		REAL *** strip = unflattenMatrix(message,n1,n2,(n3-2)/global_params->mpi_size+2);
+		
+		//combine results
+		int i1,i2,i3;
+		int z_size = (n3-2)/global_params->mpi_size+2;
+		REAL *** result = alloc3D((n1),(n2),(n3));
+		//copy results over to result matrix
+		for(i3=0;i3<(z_size-1);i3++){
+			for(i2=0;i2<n2;i2++){
+				for(i1=0;i1<n1;i1++){
+					result[i3][i2][i1] = r[0][i3][i2][i1];
+				}
+			}
+		}
+		//copy matrix 2
+		for(i3=(z_size);i3<n3+1;i3++){
+			for(i2=0;i2<n2;i2++){
+				for(i1=0;i1<n1;i1++){
+					result[i3-1][i2][i1] = strip[i3 - (z_size-1)][i2][i1];
+				}
+			}
+		}
 		// printMatrix(result,n1,n2,n3);
 		// printMatrix(r[0],n1,n2,n3);
 		// printf("NX=%d,NY=%d,NZ=%d",nx[lt-1],ny[lt-1],nz[lt-1]);
-		// rnm2=norm2u3(result,n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]*global_params->mpi_size);
-		rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
+		rnm2=norm2u3(result,n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]*global_params->mpi_size);
+		// rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
 		double tm = timer_elapsed(T_bench);
 
 		//validates the results and prints to console
