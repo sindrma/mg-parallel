@@ -35,9 +35,9 @@ int main(int argc, const char **argv)
 	// 	false 	//use some of the matrix as boundary points
 	// );
 	
-	// testGhostCell(4,4,4);
+	testGhostCell(4,4,4);
 	
-	testExchange(4,4,4);
+	// testExchange(4,4,4);
 	
 	// PPF_Print( MPI_COMM_WORLD, "\n  Test Complete\n" );
 	// printf("\n  Test Complete\n");
@@ -84,11 +84,11 @@ void testGhostCell(int x,int y,int z){
 	REAL ** ghost_data = getGhostCells(data,x,y,z);
 	//print data
 	printf("  \nFirst Plane:\n");
-	for(i1=0;i1<x*y;i1++){
+	for(i1=0;i1<(x-2)*(y-2);i1++){
 		printf(" %f:",ghost_data[0][i1]);
 	}
 	printf("  \nSecond Plane:\n");
-	for(i1=0;i1<x*y;i1++){
+	for(i1=0;i1<(x-2)*(y-2);i1++){
 		printf(" %f:",ghost_data[1][i1]);
 	}
 }
@@ -241,18 +241,4 @@ REAL *** generateMatrix(int x,int y,int z, bool buffered){
 		}
 	}
 	return data;
-}
-
-//prints out a 3d matrix
-void printMatrix(REAL *** mat,int x,int y,int z){
-	int i1,i2,i3;
-	for(i3=0;i3<z;i3++){
-		printf("\n  z=%d", i3);
-		for(i2=0;i2<y;i2++){
-			printf("\n");
-			for(i1=0;i1<x;i1++){
-				printf("%f ", mat[i3][i2][i1]);
-			}
-		}
-	}
 }

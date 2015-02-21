@@ -71,10 +71,8 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	}
 	
 	//MPI SETUP
-	// *n3= (*n3 - 2) / global_params->mpi_size + 2;
 	for(k=0;k<lt;k++) {
 		nz[k] = nz[k] / global_params->mpi_size;
-		// printf ("nz : %d \n",nz[k]);
 	}
 
 	free(mi);
