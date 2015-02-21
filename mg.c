@@ -92,6 +92,10 @@ int main(int argc, const char **argv)
 	
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	
+	if(global_params->mpi_rank == 0){
+		printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
+	}
+	
 	//each processor runs the multigrid algorithm
 	for(it=1;it<=nit;it++) {
 		//actual call to multigrid
@@ -106,22 +110,39 @@ int main(int argc, const char **argv)
 	if(global_params->mpi_rank == 0){
 		timer_stop(T_bench);
 		tinit = timer_elapsed(T_init);
-		// printf(" Initialization time: %f seconds\n", tinit);
+		printf(" Initialization time: %f seconds\n", tinit);
 		
-		// //combine r results from each processor
-		// REAL * message = (REAL*) malloc(sizeof(REAL*)*(n1)*(n2)*(n3));
-		// MPI_Recv(message,n1*n2*n3,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		//combine r results from each processor
+		// REAL * message = (REAL*) malloc(sizeof(REAL*)*n1*n2*((n3-2)/global_params->mpi_size+2));
+		// MPI_Recv(message,n1*n2*((n3-2)/global_params->mpi_size+2),MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		// 
-		// //unflatten message into 3d matrix
-		// REAL *** strip = unflattenMatrix(message,n1,n2,(n3));
+		// // unflatten message into 3d matrix
+		// REAL *** strip = unflattenMatrix(message,n1,n2,(n3-2)/global_params->mpi_size+2);
+		// 
+		// // printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size+2);
+		// // printMatrix(strip,n1,n2,(n3-2)/global_params->mpi_size+2);
 		// 
 		// //combine results
-		// REAL *** result = merge_matrices(
-		// 	r[0],strip,
-		// 	n1,n2,(n3),
-		// 	n1,n2,(n3),
-		// 	true	//1 cell of boundary data in each matrix
-		// );
+		// int i1,i2,i3;
+		// int z_size = (n3-2)/global_params->mpi_size+2;
+		// REAL *** result = alloc3D((n1),(n2),(n3));
+		// //copy results over to result matrix
+		// for(i3=0;i3<(z_size-1);i3++){
+		// 	for(i2=0;i2<n2;i2++){
+		// 		for(i1=0;i1<z_size;i1++){
+		// 			result[i3][i2][i1] = r[0][i3][i2][i1];
+		// 		}
+		// 	}
+		// }
+		// //copy matrix 2
+		// for(i3=(z_size);i3<n3+1;i3++){
+		// 	for(i2=0;i2<n2;i2++){
+		// 		for(i1=0;i1<n1;i1++){
+		// 			result[i3-1][i2][i1] = strip[i3 - (z_size-1)][i2][i1];
+		// 		}
+		// 	}
+		// }
+		// printMatrix(result,n1,n2,n3);
 		
 		// rnm2=norm2u3(result,n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
 		rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
@@ -130,9 +151,9 @@ int main(int argc, const char **argv)
 		//validates the results and prints to console
 		interpret_results(rnm2, global_params, tm);
 	} else {
-	// 	//send residual result
-	// 	REAL * message = flattenMatrix(r[0],n1,n2,(n3));
-	// 	MPI_Send(message, (n1)*(n2)*(n3), MPI_DOUBLE, 0, global_params->mpi_rank, MPI_COMM_WORLD);
+		//send residual result
+		// REAL * message = flattenMatrix(r[0],n1,n2,((n3-2)/global_params->mpi_size+2));
+		// MPI_Send(message, (n1)*(n2)*((n3-2)/global_params->mpi_size+2), MPI_DOUBLE, 0, global_params->mpi_rank, MPI_COMM_WORLD);
 	}
 	free(v);
 	freeGrids(u);
@@ -500,7 +521,8 @@ void resid(REAL ***u, REAL*** v, REAL*** r,
 	u1 = _u1[omp_get_thread_num()];
 	u2 = _u2[omp_get_thread_num()];
 	//cycles through each dimension
-	for(i3=1;i3<n3-1;i3++) {
+	//don't do residual on last plane of last slice
+	for(i3=1;i3<n3-(global_params->mpi_rank == global_params->mpi_size - 1 ? 1:0);i3++) {
 		for(i2=1;i2<n2-1;i2++) {
 			for(i1=0;i1<n1;i1++) {
 				u1[i1] = u[i3][i2-1][i1]   + u[i3][i2+1][i1] 
@@ -545,17 +567,19 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//     down cycle.
 	//     restrict the residual from the fine grid to the coarse
 	//---------------------------------------------------------------------
-	if(global_params->mpi_rank != 0 && n1 == 10){
-		printf("\nCOARSENING MESH, %d,%d,%d\n",n1,n2,n3);
-	}
+	// if(global_params->mpi_rank != 0 && n1 == 10){
+	// 	printf("\nCOARSENING MESH, %d,%d,%d\n",n1,n2,n3);
+	// }
 	for(k=lt-1-restriction;k>=1;k--) {
 		j = k-1;
+		// printf("\nN:%d\n",m1[k]);
 		rprj3_mpi(r[lt-1-k],m1[k],m2[k],m3[k],r[lt-1-j],m1[j],m2[j],m3[j]);
 		//print matrix
-		if(global_params->mpi_rank != 0 && n1 == 10){
-			printf("K=%d -- %d,%d,%d\n",k,m1[k],m2[k],m3[k]);
-			printMatrix(r[lt-1-k],m1[k],m2[k],m3[k]);
-		}
+		//10,6,ect
+		// if(global_params->mpi_rank != 0 && m1[k] == 6){
+		// 	printf("K=%d -- %d,%d,%d\n",k,m1[k],m2[k],m3[k]);
+		// 	printMatrix(r[lt-1-k],m1[k],m2[k],m3[k]);
+		// }
 	}
 	
 	
@@ -1145,15 +1169,17 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 //---------------------------------------------------------------------
 //     comm3 organizes the communication on all borders 
 //---------------------------------------------------------------------
+	//exchange around the x-axis
 	int i1, i2, i3;
-	for(i3=1;i3<n3-1;i3++) {
-		for(i2=1;i2<n2-1;i2++) {
+	int isLast = (global_params->mpi_rank == global_params->mpi_size - 1 ? 1:0);
+	int isFirst = (global_params->mpi_rank == 0 ? 1:0);
+	for(i3=isFirst;i3<n3-isLast;i3++) {
+		for(i2=isFirst;i2<n2-isLast;i2++) {
 			u[i3][i2][0] = u[i3][i2][n1-2];
 			u[i3][i2][n1-1] = u[i3][i2][1];
 		}
 	}
-	
-	for(i3=1;i3<n3-1;i3++)
+	for(i3=isFirst;i3<n3-isLast;i3++)
 	{
 		for(i1=0;i1<n1;i1++)
 		{
