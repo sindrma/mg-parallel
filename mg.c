@@ -9,6 +9,11 @@
 	-n	: problem size
 	-nit	: number of iterations
 	-lt	: sets the lt... i think this defines how large the "W" cycle is?
+	
+	FUNCTIONS TO VERIFY:
+	-RESID: VERIFIED
+	-RPRJ3_MPI: NOT VERIFIED
+	-RESID: NOT VERIFIED
 */
 
 #include <omp.h>
@@ -72,14 +77,13 @@ int main(int argc, const char **argv)
 	gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
 	
 	//Initialize arrays- currently does this in strips
-	//Issue: currently the extra "+2" is required to make it stay in bounds- why isn't it large enough without it?
 	// printf("N1= %d, N3=%d\n",n1-2,((n3-2) / global_params->mpi_size + 2 + 2));
 	u = allocGrids(lt, n1-2, n2-2, n3-2, 2);
 	r = allocGrids(lt, n1-2, n2-2, n3-2, 2);
 	
 	zero3(u[0],n1,n2,n3 / global_params->mpi_size); //zero-out all of u
 	
-	//create local v (for residual)
+	//create local v (different strip per processor)
 	REAL ***  local_v = splitMatrix(
 		v, //matrix to split
 		n1,n2,n3, //matrix size
@@ -123,7 +127,7 @@ int main(int argc, const char **argv)
 
     //validates the results and prints to console
     //if(global_params->mpi_rank==0){
-    //    interpret_results(rnm2, global_params, tm);
+      //  interpret_results(rnm2, global_params, tm);
     //}
     
     /*
@@ -161,9 +165,7 @@ int main(int argc, const char **argv)
 		}
 		// printMatrix(result,n1,n2,n3);
 		// printMatrix(r[0],n1,n2,n3);
-		// printf("NX=%d,NY=%d,NZ=%d",nx[lt-1],ny[lt-1],nz[lt-1]);
 		rnm2=norm2u3(result,n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]*global_params->mpi_size);
-		// rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
 		double tm = timer_elapsed(T_bench);
 
 		//validates the results and prints to console
@@ -175,7 +177,7 @@ int main(int argc, const char **argv)
 	}
     
     */
-	free3D(v, n1, n2);
+	//free3D(v, n1, n2);
 	freeGrids(u);
 	freeGrids(r);
 	
@@ -529,8 +531,6 @@ void resid(REAL ***u, REAL*** v, REAL*** r,
 	
 	double *u1, *u2;
 	
-	// printf("\nn1: %d \nn2: %d \n n3:%d",n1,n2,n3);
-	
 	if (!init) {
 		_u1 = (REAL**)malloc(sizeof(REAL*)*omp_get_max_threads()); 
 		_u2 = (double**)malloc(sizeof(REAL*)*omp_get_max_threads());
@@ -551,9 +551,6 @@ void resid(REAL ***u, REAL*** v, REAL*** r,
 				u2[i1] = u[i3-1][i2-1][i1] + u[i3-1][i2+1][i1]
 					+ u[i3+1][i2-1][i1] + u[i3+1][i2+1][i1];
 			}
-			//issue: x = 8, y = 4, z = 2
-			//first call: all of u is 0
-			//off by 4
 			for(i1=1;i1<n1-1;i1++) {
 				r[i3][i2][i1] = v[i3][i2][i1]
 					- a[0] * u[i3][i2][i1]
@@ -579,7 +576,6 @@ void resid(REAL ***u, REAL*** v, REAL*** r,
 }
 
 //Multigrid 3-Dimensions function
-//Call: mg3P(u,v,r,a,c,n1,n2,n3);
 void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,int n2,int n3,int restriction)
 {
 	//---------------------------------------------------------------------
@@ -587,27 +583,28 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//---------------------------------------------------------------------
 	//      double precision u(nr),v(nv),r(nr)
 	int j,k;
+	
 	//---------------------------------------------------------------------
 	//     down cycle.
 	//     restrict the residual from the fine grid to the coarse
 	//---------------------------------------------------------------------
+	//MEMORY TODO : check m1,m2,m3
 	for(k=lt-1-restriction;k>=1;k--) {
 		j = k-1;
 		rprj3_mpi(r[lt-1-k],m1[k],m2[k],m3[k],r[lt-1-j],m1[j],m2[j],m3[j]);
+		//ERROR HAS HAPPENED BY THIS TIME- it looks like the last matrix is not filled out
+		// if(global_params->mpi_rank == 0 && k==lt-1){
+		// 	printMatrix(r[lt-1-k],m1[k],m2[k],m3[k]);
+		// }
 	}
-	
 	
 	k = 0;
 	//---------------------------------------------------------------------
 	//     compute an approximate solution on the coarsest grid
 	//---------------------------------------------------------------------
-	//***VERIFIED TO HERE***
-	
 	zero3(u[lt-1-k],m1[k],m2[k],m3[k]);
 	psinv(r[lt-1-k],u[lt-1-k],m1[k],m2[k],m3[k], c);
 	
-	//	m1,m2,m3 are ints of maxlevel size- they are defined in globals
-	//	n1,n2,n3 are the size of the matrix
 	for(k=1;k<lt-1-restriction;k++) {
 		j = k-1;
 		//---------------------------------------------------------------------
@@ -690,82 +687,6 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 	comm3(s,m1j,m2j,m3j);
 }
 
-//r is the finer level of residual error, and s is the coarser level
-void rprj3(REAL*** r, int m1k,int m2k,int m3k,
-			REAL*** s,int m1j,int m2j,int m3j)
-{
-	//---------------------------------------------------------------------
-	//     rprj3 projects onto the next coarser grid,
-	//     using a trilinear Finite Element projection:  s = r' = P r
-	//     
-	//     This  implementation costs  20A + 4M per result, where
-	//     A and M denote the costs of Addition and Multiplication.
-	//     Note that this vectorizes, and is also fine for cache 
-	//     based machines.  
-	//---------------------------------------------------------------------
-	//     double precision r(m1k,m2k,m3k), s(m1j,m2j,m3j)
-	int j3, j2, j1, i3, i2, i1, d1, d2, d3;
-	
-	double x2,y2;
-	double *x1,*y1;
-	
-	bool init = false;
-	//Private arrays for each thread
-	static double **_x1;
-	static double **_y1;
-	
-	//used for openmp- should be re-written and simplified...
-	if (!init) {
-		_x1 = (double**)malloc(sizeof(double*)*omp_get_max_threads());
-		_y1 = (double**)malloc(sizeof(double*)*omp_get_max_threads());
-		
-		for (i1 = 0; i1 < omp_get_max_threads(); i1++) {
-			_x1[i1] = malloc(sizeof(double)*(nm+1));
-			_y1[i1] = malloc(sizeof(double)*(nm+1));
-		}
-		init = true;
-	}
-	
-	d1 = (m1k==3) ? 2 : 1;
-	d2 = (m2k==3) ? 2 : 1;
-	d3 = (m3k==3) ? 2 : 1;
-	
-	#pragma omp parallel private(j1,j2,j3,i1,i2,i3,x1,y1,x2,y2)
-	{
-		x1 = _x1[omp_get_thread_num()];
-		y1 = _y1[omp_get_thread_num()];
-		
-		#pragma omp for
-		for(j3=2;j3<=m3j-1;j3++) {
-			i3 = 2*j3-d3-1;
-			for(j2=2;j2<=m2j-1;j2++) {
-				i2 = 2*j2-d2-1;
-				for(j1=2;j1<=m1j;j1++) {
-					i1 = 2*j1-d1-1;
-					x1[i1-1] = r[i3][i2-1][i1-1] + r[i3][i2+1][i1-1]
-						+ r[i3-1][i2][i1-1] + r[i3+1][i2][i1-1];
-					y1[i1-1] = r[i3-1][i2-1][i1-1] + r[i3+1][i2-1][i1-1] 
-						+ r[i3-1][i2+1][i1-1] + r[i3+1][i2+1][i1-1];
-				}
-				
-				for(j1=2;j1<=m1j-1;j1++) {
-					i1 = 2*j1-d1-1;
-					y2 = r[i3-1][i2-1][i1]  + r[i3+1][i2-1][i1] 
-						+ r[i3-1][i2+1][i1] + r[i3+1][i2+1][i1];
-					x2 = r[i3][i2-1][i1]    + r[i3][i2+1][i1]
-						+ r[i3-1][i2][i1]   + r[i3+1][i2][i1];
-					s[j3-1][j2-1][j1-1] =
-						0.5      *   r[i3][i2][i1]
-						+ 0.25   * ( r[i3][i2][i1-1]+r[i3][i2][i1+1]+x2)
-						+ 0.125  * ( x1[i1-1] + x1[i1+1] + y2)
-						+ 0.0625 * ( y1[i1-1] + y1[i1+1] );
-				}
-			}
-		}
-	}
-	comm3(s,m1j,m2j,m3j);
-}
-
 void exchange(REAL ***r, int n1,int n2,int n3 ){
 	REAL ** ghost_data = getGhostCells(r,n1,n2,n3);
 	//just send the x*y planes- not including the buffer
@@ -787,11 +708,7 @@ void exchange(REAL ***r, int n1,int n2,int n3 ){
     
 }
 
-//TODO : 
-//	-remove omp
-//	-exchange ghost cell data
-//	-processor 1 compiles results
-//z is the coarser level, and u is the finer level (currently zeroed out)
+//z is the coarser level, and u is the finer level
 void interp_mpi(REAL ***z, int mm1, int mm2, int mm3, REAL ***u,
         int n1,int n2,int n3 ){
 	int i3, i2, i1, d1, d2, d3, t1, t2, t3;
@@ -935,187 +852,6 @@ void interp_mpi(REAL ***z, int mm1, int mm2, int mm3, REAL ***u,
 			}
 		}
 	}
-	
-	//TODO : 
-	// -exchange ghost cell data
-	// -remove openmp code
-	// REAL ** ghost_data = getGhostCells(u,n1-2,n2-2,(n3-2));
-	// int messageSize = (n1-2)*(n2-2);
-	// REAL ** results = exchange_data(ghost_data,messageSize);
-	// printf(" mm1:  %d\n mm2:   %d\n", mm1-2, mm2-2 );
-	// printf(" n1:  %d\n n2:   %d\n", n1, n2 );
-	// printf(" -------\n" );
-	//TODO : need to look over the mechanics of this- the boundaries are not 0!
-	// for (i2 = 1; i2 < n1-2; i2++) {
-	// 	for (i1 = 1; i1 < n2-2; i1++) {
-	// 		// z[0][i2][i1] = 0.0; - returns bad- shouldn't be 0!
-	// 		z[0][i2][i1] += results[0][(mm1-2)*i2 + i1];
-	// 		z[mm3-2][i2][i1] += results[1][(mm2-2)*i2 + i1];
-	// 	}
-	// }
-}
-
-//Upward cycle / prolongation
-void interp(REAL ***z, int mm1, int mm2, int mm3, REAL ***u,
-        int n1,int n2,int n3 )
-{
-    //---------------------------------------------------------------------
-    //     interp adds the trilinear interpolation of the correction
-    //     from the coarser grid to the current approximation:  u = u + Qu'
-    //     
-    //     Observe that this  implementation costs  16A + 4M, where
-    //     A and M denote the costs of Addition and Multiplication.  
-    //     Note that this vectorizes, and is also fine for cache 
-    //     based machines.  Vector machines may get slightly better 
-    //     performance however, with 8 separate "do i1" loops, rather than 4.
-    //---------------------------------------------------------------------
-    //      double precision z(mm1,mm2,mm3),u(n1,n2,n3)
-    int i3, i2, i1, d1, d2, d3, t1, t2, t3;
-
-    // note that m = 1037 in globals.h but for this only need to be
-    // 535 to handle up to 1024^3
-    //      integer m
-    //      parameter( m=535 )
-    int m=535;
-    double *z1,*z2,*z3;
-
-    static bool init = false;
-
-    //Private arrays for each thread
-    static double **_z1;
-    static double **_z2;
-    static double **_z3;
-
-    if (!init) {
-        _z1 = (double**)malloc(sizeof(double*)*omp_get_max_threads()); 
-        _z2 = (double**)malloc(sizeof(double*)*omp_get_max_threads());
-        _z3 = (double**)malloc(sizeof(double*)*omp_get_max_threads());
-
-        for (i1 = 0; i1 < omp_get_max_threads(); i1++) {
-            _z1[i1] = malloc(sizeof(double)*m);
-            _z2[i1] = malloc(sizeof(double)*m);
-            _z3[i1] = malloc(sizeof(double)*m);
-        }
-        init = true;
-    }
-
-    if( n1 != 3 && n2 != 3 && n3 != 3 ) {
-        #pragma omp parallel private(i1,i2,i3,z1,z2,z3)
-        {
-            z1 = _z1[omp_get_thread_num()];
-            z2 = _z2[omp_get_thread_num()];
-            z3 = _z3[omp_get_thread_num()];
-
-            #pragma omp for
-            for(i3=1;i3<=mm3-1;i3++) {
-                for(i2=1;i2<=mm2-1;i2++) {
-                    for(i1=1;i1<=mm1;i1++) {
-                        z1[i1-1] = z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1];
-                        z2[i1-1] = z[i3][i2-1][i1-1] + z[i3-1][i2-1][i1-1];
-                        z3[i1-1] = z[i3][i2][i1-1]   + z[i3][i2-1][i1-1] + z1[i1-1];
-                    }
-
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-2][2*i2-2][2*i1-2]  += z[i3-1][i2-1][i1-1];
-                        u[2*i3-2][2*i2-2][2*i1-1]  +=
-                            0.5*(z[i3-1][i2-1][i1] +  z[i3-1][i2-1][i1-1]);
-                    }
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-2][2*i2-1][2*i1-2] += 0.5  *  z1[i1-1];
-                        u[2*i3-2][2*i2-1][2*i1-1] += 0.25 * (z1[i1-1] + z1[i1] );
-                    }
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1][2*i2-2][2*i1-2] += 0.5  * z2[i1-1];
-                        u[2*i3-1][2*i2-2][2*i1-1] += 0.25 *(z2[i1-1] + z2[i1] );
-                    }
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1][2*i2-1][2*i1-2] += 0.25*z3[i1-1];
-                        u[2*i3-1][2*i2-1][2*i1-1] += 0.125*( z3[i1-1] + z3[i1] );
-                    }
-                }
-            }
-        }
-    } else {
-        if(n1==3) {
-            d1 = 2;
-            t1 = 1;
-        } else {
-            d1 = 1;
-            t1 = 0;
-        }
-
-        if(n2==3) {
-            d2 = 2;
-            t2 = 1;
-        } else {
-            d2 = 1;
-            t2 = 0;
-        }
-
-        if(n3==3) {
-            d3 = 2;
-            t3 = 1;
-        } else {
-            d3 = 1;
-            t3 = 0;
-        }
-
-        #pragma omp parallel private(i1,i2,i3)
-        {
-            #pragma omp for
-            for(i3=1;i3<=mm3-1;i3++) {
-                for(i2=1;i2<=mm2-1;i2++) {
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1-d3][2*i2-1-d2][2*i1-1-d1] +=
-                            z[i3-1][i2-1][i1-1];
-                    }
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1-d3][2*i2-1-d2][2*i1-1-t1] +=
-                            0.5*(z[i3-1][i2-1][i1] + z[i3-1][i2-1][i1-1]);
-                    }
-                }
-                for(i2=1;i2<=mm2-1;i2++) {
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1-d3][2*i2-1-t2][2*i1-1-d1] +=
-                            0.5*(z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1]);
-                    }
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1-d3][2*i2-1-t2][2*i1-1-t1] +=
-                            0.25*(z[i3-1][i2][i1] + z[i3-1][i2-1][i1]
-                                    +z[i3-1][i2][i1-1]+z[i3-1][i2-1][i1-1]);
-                    }
-                }
-            }
-            #pragma omp for nowait
-            for(i3=1;i3<=mm3-1;i3++) {
-                for(i2=1;i2<=mm2-1;i2++) {
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1-t3][2*i2-1-d2][2*i1-1-d1] =
-                            0.5*(z[i3][i2-1][i1-1]+z[i3-1][i2-1][i1-1]);
-                    }
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1-t3][2*i2-1-d2][2*i1-1-t1] +=
-                            0.25*(z[i3][i2-1][i1] + z[i3][i2-1][i1-1]
-                                    +z[i3-1][i2-1][i1]+z[i3-1][i2-1][i1-1]);
-                    }
-                }
-                for(i2=1;i2<=mm2-1;i2++) {
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1-t3][2*i2-1-t2][2*i1-1-d1] +=
-                            0.25*(z[i3][i2][i1-1]+z[i3][i2-1][i1-1]
-                                    +z[i3-1][i2][i1-1]+z[i3-1][i2-1][i1-1]);
-                    }
-                    for(i1=1;i1<=mm1-1;i1++) {
-                        u[2*i3-1-t3][2*i2-1-t2][2*i1-1-t1] +=
-                            0.125*(z[i3][i2][i1]+z[i3][i2-1][i1]
-                                    +z[i3][i2][i1-1]+z[i3][i2-1][i1-1]
-                                    +z[i3-1][i2][i1]+z[i3-1][i2-1][i1]
-                                    +z[i3-1][i2][i1-1]+z[i3-1][i2-1][i1-1]);
-                    }
-                }
-            }
-        }
-    }
 }
 
 //smoother

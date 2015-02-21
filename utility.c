@@ -276,7 +276,7 @@ REAL **alloc2D(int n, int m){
     int i;
     REAL ** buffer = (REAL**) malloc(sizeof(REAL*)*n);
     for(i=0; i<n; i++){
-        buffer[0] = (REAL*) malloc(sizeof(REAL)*m);
+        buffer[i] = (REAL*) malloc(sizeof(REAL)*m);
     }
 	return buffer;
 }
