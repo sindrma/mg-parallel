@@ -93,20 +93,22 @@ int main(int argc, const char **argv)
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	
 	if(global_params->mpi_rank != 0){
-		// printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
+		printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
 	}
 	
 	//each processor runs the multigrid algorithm
-	for(it=1;it<=nit;it++) {
+	/*
+    for(it=1;it<=nit;it++) {
 		//actual call to multigrid
 		mg3P(u,local_v,r,a,c,n1,n2,(n3-2)/global_params->mpi_size + 2,0);
 		//compute the residual error here...
 		//only pass in the spliced portion of v...
 		resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	} 
-	
+	 */
 	//processor 1 interprets results
 	//TODO : test/correct and verify this works.  Also needs to handle more than just 2 processors case
+    /*
 	if(global_params->mpi_rank == 0){
 		timer_stop(T_bench);
 		tinit = timer_elapsed(T_init);
@@ -145,16 +147,18 @@ int main(int argc, const char **argv)
 		// printMatrix(result,n1,n2,n3);
 		
 		// rnm2=norm2u3(result,n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
-		rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
+		//rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
 		double tm = timer_elapsed(T_bench);
 
 		//validates the results and prints to console
-		interpret_results(rnm2, global_params, tm);
+		//interpret_results(rnm2, global_params, tm);
 	} else {
 		//send residual result
 		// REAL * message = flattenMatrix(r[0],n1,n2,((n3-2)/global_params->mpi_size+2));
 		// MPI_Send(message, (n1)*(n2)*((n3-2)/global_params->mpi_size+2), MPI_DOUBLE, 0, global_params->mpi_rank, MPI_COMM_WORLD);
 	}
+    
+    */
 	free(v);
 	freeGrids(u);
 	freeGrids(r);

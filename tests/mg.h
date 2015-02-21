@@ -4,6 +4,7 @@
 #include "../types.h"
 #include "../includes.h"
 
+void testResid(int argc, const char **argv);
 void test_Flatten_AND_Unflatten(int x,int y,int z);
 
 void testGhostCell(int x,int y,int z);
