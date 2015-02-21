@@ -83,19 +83,19 @@ REAL ** exchange_data(REAL** data,int size){
 //currently returns front and back planes-
 REAL ** getGhostCells(REAL*** mat,int x,int y, int z){
 	int i2,i1;
-	int offset = (x-2)*(y-2); //plane size
+	int offset = (x)*(y); //plane size
 	//in strips the ghost cells consists of two planes
 	REAL ** ghost_cells = (REAL**) malloc(sizeof(REAL*)*2);
-	ghost_cells[0] = (REAL*) malloc(sizeof(REAL)*offset - 2);
-	ghost_cells[1] = (REAL*) malloc(sizeof(REAL)*offset - 2);
+	ghost_cells[0] = (REAL*) malloc(sizeof(REAL)*offset);
+	ghost_cells[1] = (REAL*) malloc(sizeof(REAL)*offset);
 	
 	//note: the matrix is already padded with boundary data so it must be offset by 1
-	for(i2=1;i2<y-1;i2++){
-		for(i1=1;i1<x-1;i1++){
+	for(i2=0;i2<y;i2++){
+		for(i1=0;i1<x;i1++){
 			//get first plane
-			ghost_cells[0][(i2-1)*(x-2) + i1 - 1] = mat[0+1][i2][i1];
+			ghost_cells[0][(i2)*(x) + i1] = mat[0+1][i2][i1];
 			//get last plane
-			ghost_cells[1][(i2-1)*(x-2) + i1 - 1] = mat[z-1-1][i2][i1];
+			ghost_cells[1][(i2)*(x) + i1] = mat[z-1-1][i2][i1];
 		}
 	}
 	

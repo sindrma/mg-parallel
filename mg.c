@@ -92,10 +92,6 @@ int main(int argc, const char **argv)
 	
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	
-	if(global_params->mpi_rank != 0){
-		// printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
-	}
-	
 	//each processor runs the multigrid algorithm
 	for(it=1;it<=nit;it++) {
 		//actual call to multigrid
@@ -103,7 +99,7 @@ int main(int argc, const char **argv)
 		//compute the residual error here...
 		//only pass in the spliced portion of v...
 		resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
-	} 
+	}
 	
 	//processor 1 interprets results
 	//TODO : test/correct and verify this works.  Also needs to handle more than just 2 processors case
@@ -119,9 +115,6 @@ int main(int argc, const char **argv)
 		// // unflatten message into 3d matrix
 		// REAL *** strip = unflattenMatrix(message,n1,n2,(n3-2)/global_params->mpi_size+2);
 		// 
-		// // printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size+2);
-		// // printMatrix(strip,n1,n2,(n3-2)/global_params->mpi_size+2);
-		// 
 		// //combine results
 		// int i1,i2,i3;
 		// int z_size = (n3-2)/global_params->mpi_size+2;
@@ -129,7 +122,7 @@ int main(int argc, const char **argv)
 		// //copy results over to result matrix
 		// for(i3=0;i3<(z_size-1);i3++){
 		// 	for(i2=0;i2<n2;i2++){
-		// 		for(i1=0;i1<z_size;i1++){
+		// 		for(i1=0;i1<n1;i1++){
 		// 			result[i3][i2][i1] = r[0][i3][i2][i1];
 		// 		}
 		// 	}
@@ -143,8 +136,9 @@ int main(int argc, const char **argv)
 		// 	}
 		// }
 		// printMatrix(result,n1,n2,n3);
-		
-		// rnm2=norm2u3(result,n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
+		// printMatrix(r[0],n1,n2,n3);
+		// printf("NX=%d,NY=%d,NZ=%d",nx[lt-1],ny[lt-1],nz[lt-1]);
+		// rnm2=norm2u3(result,n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]*global_params->mpi_size);
 		rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
 		double tm = timer_elapsed(T_bench);
 
@@ -152,8 +146,8 @@ int main(int argc, const char **argv)
 		interpret_results(rnm2, global_params, tm);
 	} else {
 		//send residual result
-		// REAL * message = flattenMatrix(r[0],n1,n2,((n3-2)/global_params->mpi_size+2));
-		// MPI_Send(message, (n1)*(n2)*((n3-2)/global_params->mpi_size+2), MPI_DOUBLE, 0, global_params->mpi_rank, MPI_COMM_WORLD);
+		REAL * message = flattenMatrix(r[0],n1,n2,((n3-2)/global_params->mpi_size+2));
+		MPI_Send(message, (n1)*(n2)*((n3-2)/global_params->mpi_size+2), MPI_DOUBLE, 0, global_params->mpi_rank, MPI_COMM_WORLD);
 	}
 	free(v);
 	freeGrids(u);
@@ -547,32 +541,12 @@ void resid(REAL ***u, REAL*** v, REAL*** r,
 			}
 		}
 	}
-	
-	
-	// if(global_params->mpi_rank == 0 && n3 == 6){
-	// 	printMatrix(r,n1,n2,n3);
-	// }
-	
-	// printf("COMM3 %d,%d,%d\n",n1,n2,n3);
-	//exchange boundary data here
-	REAL ** ghost_data = getGhostCells(r,n1,n2,n3);
-	//just send the x*y planes- not including the buffer
-	int messageSize = (n1-2)*(n2-2);
-	REAL ** results = exchange_data(ghost_data,messageSize);
-	//put results into the r matrix
-	for (i2 = 0; i2 < n1-2; i2++) {
-		for (i1 = 0; i1 < n2-2; i1++) {
-			if(global_params->mpi_rank != 0 ){
-				r[0][i2+1][i1+1] = results[0][(n1-2)*i2 + i1];
-			}
-			if(global_params->mpi_rank != global_params->mpi_size - 1 ){
-				r[n3-1][i2+1][i1+1] = results[1][(n1-2)*i2 + i1];
-			}
-		}
-	}
 	//---------------------------------------------------------------------
 	//     exchange boundary data
+	//		1- accross processors
+	//		2- accross strips
 	//---------------------------------------------------------------------
+	exchange(r,n1,n2,n3);
 	comm3(r,n1,n2,n3);
 }
 
@@ -589,17 +563,9 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//     down cycle.
 	//     restrict the residual from the fine grid to the coarse
 	//---------------------------------------------------------------------
-	// if(global_params->mpi_rank != 0 && n1 == 10){
-	// 	printf("\nCOARSENING MESH, %d,%d,%d\n",n1,n2,n3);
-	// }
 	for(k=lt-1-restriction;k>=1;k--) {
 		j = k-1;
-		//TODO : WORKING ON: verify next level
 		rprj3_mpi(r[lt-1-k],m1[k],m2[k],m3[k],r[lt-1-j],m1[j],m2[j],m3[j]);
-		// if(global_params->mpi_rank != 0 && m1[k] == 6){
-		// 	printf("K=%d -- %d,%d,%d\n",k,m1[k],m2[k],m3[k]);
-		// 	printMatrix(r[lt-1-k],m1[k],m2[k],m3[k]);
-		// }
 	}
 	
 	
@@ -607,6 +573,8 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//---------------------------------------------------------------------
 	//     compute an approximate solution on the coarsest grid
 	//---------------------------------------------------------------------
+	//***VERIFIED TO HERE***
+	
 	zero3(u[lt-1-k],m1[k],m2[k],m3[k]);
 	psinv(r[lt-1-k],u[lt-1-k],m1[k],m2[k],m3[k], c);
 	
@@ -651,23 +619,8 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 	//keeps track of the number of ghost cell regions the processor should wait for- first and last  strips require less
 	int receiveCount = 2;
 	
-	
-	REAL ** ghost_data = getGhostCells(r,m1k,m2k,m3k);
-	//just send the x*y planes- not including the buffer
-	int messageSize = (m1k-2)*(m2k-2);
-	REAL ** results = exchange_data(ghost_data,messageSize);
-	
-	// put results into the r matrix
-	for (i2 = 0; i2 < m1k-2; i2++) {
-		for (i1 = 0; i1 < m2k-2; i1++) {
-			if(global_params->mpi_rank != 0 ){
-				r[0][i2+1][i1+1] = results[0][(m1k-2)*i2 + i1];
-			}
-			if(global_params->mpi_rank != global_params->mpi_size - 1 ){
-				r[m3k-1][i2+1][i1+1] = results[1][(m1k-2)*i2 + i1];
-			}
-		}
-	}
+	//Exchange boundary data accross processors
+	exchange(r,m1k,m2k,m3k);
 	
 	//this seems to be incorrect - (it's larger than necessary)
 	//it initializes for the largest possible array needed (finest level), instead of adjusting to the current level size
@@ -785,6 +738,26 @@ void rprj3(REAL*** r, int m1k,int m2k,int m3k,
 	comm3(s,m1j,m2j,m3j);
 }
 
+void exchange(REAL ***r, int n1,int n2,int n3 ){
+	REAL ** ghost_data = getGhostCells(r,n1,n2,n3);
+	//just send the x*y planes- not including the buffer
+	int messageSize = (n1)*(n2);
+	int i1,i2;
+	REAL ** results = exchange_data(ghost_data,messageSize);
+	
+	// put results into the r matrix
+	for (i2 = 0; i2 < n2; i2++) {
+		for (i1 = 0; i1 < n1; i1++) {
+			if(global_params->mpi_rank != 0 ){
+				r[0][i2][i1] = results[0][(n1)*i2 + i1];
+			}
+			if(global_params->mpi_rank != global_params->mpi_size - 1 ){
+				r[n3-1][i2][i1] = results[1][(n1)*i2 + i1];
+			}
+		}
+	}
+}
+
 //TODO : 
 //	-remove omp
 //	-exchange ghost cell data
@@ -802,6 +775,9 @@ void interp_mpi(REAL ***z, int mm1, int mm2, int mm3, REAL ***u,
 	double *z1,*z2,*z3;
 	
 	static bool init = false;
+	
+	//Exchange boundary data accross processors
+	exchange(z,mm1,mm2,mm3);
 	
 	//Private arrays for each thread
 	static double **_z1;
@@ -1180,6 +1156,8 @@ void psinv(REAL*** r, REAL*** u, int n1,int n2,int n3, double c[4])
     //---------------------------------------------------------------------
     //     exchange boundary points
     //---------------------------------------------------------------------
+	//Exchange boundary data accross processors
+	exchange(u,n1,n2,n3);
     comm3(u,n1,n2,n3);
 }
 
