@@ -83,19 +83,21 @@ REAL ** exchange_data(REAL** data,int size){
 //currently returns front and back planes-
 REAL ** getGhostCells(REAL*** mat,int x,int y, int z){
 	int i2,i1;
-	int offset = (x-2)*(y-2); //plane size
+	int offset = (x)*(y); //plane size
 	//in strips the ghost cells consists of two planes
-	REAL ** ghost_cells = (REAL**) malloc(sizeof(REAL*)*2);
-	ghost_cells[0] = (REAL*) malloc(sizeof(REAL)*offset - 2);
-	ghost_cells[1] = (REAL*) malloc(sizeof(REAL)*offset - 2);
+	//REAL ** ghost_cells = (REAL**) malloc(sizeof(REAL*)*2);
+	//ghost_cells[0] = (REAL*) malloc(sizeof(REAL)*offset);
+	//ghost_cells[1] = (REAL*) malloc(sizeof(REAL)*offset);
+    
+    REAL **ghost_cells = alloc2D(2, offset);
 	
 	//note: the matrix is already padded with boundary data so it must be offset by 1
-	for(i2=1;i2<y-1;i2++){
-		for(i1=1;i1<x-1;i1++){
+	for(i2=0;i2<y;i2++){
+		for(i1=0;i1<x;i1++){
 			//get first plane
-			ghost_cells[0][(i2-1)*(x-2) + i1 - 1] = mat[0+1][i2][i1];
+			ghost_cells[0][(i2)*(x) + i1] = mat[0+1][i2][i1];
 			//get last plane
-			ghost_cells[1][(i2-1)*(x-2) + i1 - 1] = mat[z-1-1][i2][i1];
+			ghost_cells[1][(i2)*(x) + i1] = mat[z-1-1][i2][i1];
 		}
 	}
 	
@@ -270,6 +272,23 @@ void bubble(double ten[],int j1[],int j2[],int j3[],int m,int ind )
     }
 }
 
+REAL **alloc2D(int n, int m){
+    int i;
+    REAL ** buffer = (REAL**) malloc(sizeof(REAL*)*n);
+    for(i=0; i<n; i++){
+        buffer[0] = (REAL*) malloc(sizeof(REAL)*m);
+    }
+	return buffer;
+}
+
+void free2D(REAL** buffer, int n){
+    int i;
+    for(i=0; i<n; i++){
+        free(buffer[i]);
+    }
+    free(buffer);
+}
+
 
 REAL ***alloc3D(int n, int m,int k)
 {
@@ -293,10 +312,21 @@ REAL ***alloc3D(int n, int m,int k)
     return m_buffer;
 }
 
-void free3D(REAL*** arr)
+void free3D_old(REAL*** arr)
 {
     free(arr[0][0]);
     free(arr[0]);
+    free(arr);
+}
+
+void free3D(REAL*** arr, int n, int m){
+    int i,j;
+    for(i=0; i<n; i++){
+        for(j=0; j<m; j++){
+            free(arr[i][j]);   
+        }
+        free(arr[i]);
+    }
     free(arr);
 }
 

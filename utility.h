@@ -20,12 +20,17 @@ REAL * flattenMatrix(REAL*** mat,int x,int y,int z);
 
 double TestNorm(double r[],int n1,int n2,int n3);
 
+REAL **alloc2D(int n, int m);
+void free2D(REAL** buffer, int n);
+
 //Fill the 3-dimensional array z with zeroes
 void zero3old(REAL z[],int off,int n1,int n2,int n3);
 void zero3(REAL ***z,int n1,int n2,int n3);
 
 REAL ***alloc3D(int n, int m,int k);
-void free3D(REAL*** arr);
+// does not free up all pointers 
+void free3D_old(REAL*** arr);
+void free3D(REAL*** arr, int n, int m);
 
 //Allocate course and fine grids
 //Finest grid has index depth-1 and has dimensions (n+2)*(m+2)*(k+2)
