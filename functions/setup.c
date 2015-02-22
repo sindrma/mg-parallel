@@ -29,7 +29,7 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	
 	ng[  (lt-1)*size1]=nx[lt-1];
 	ng[1+(lt-1)*size1]=ny[lt-1];
-	ng[2+(lt-1)*size1]=nz[lt-1]  / global_params->mpi_size;
+	ng[2+(lt-1)*size1]=nz[lt-1];
 
 	for(ax=0;ax<size1;ax++)
 		for(k=lt-2;k>=0;k--)
@@ -40,6 +40,10 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 		ny[k]=ng[1+k*size1];
 		nz[k]=ng[2+k*size1];
 	}
+    
+    for(k=lt-1;k<=0;k++){
+        nz[k] = nz[lt-1] / global_params->mpi_size;   
+    }
 	
 	for(k=lt-1;k>=0;k--) {
 		for(ax=0;ax<size1;ax++) {

@@ -29,8 +29,8 @@ void zero3(REAL ***z,int n1,int n2,int n3);
 
 REAL ***alloc3D(int n, int m,int k);
 // does not free up all pointers 
-void free3D_old(REAL*** arr);
-void free3D(REAL*** arr, int n, int m);
+void free3D(REAL*** arr);
+void free3D_old(REAL*** arr, int n, int m);
 
 //Allocate course and fine grids
 //Finest grid has index depth-1 and has dimensions (n+2)*(m+2)*(k+2)

@@ -68,12 +68,16 @@ int main(int argc, const char **argv)
 	//setup initializes some of the variables used...
 	grid_t grid;
 	setup(&n1, &n2, &n3, &grid);
-	
+	//PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nxk=%d, nyk=%d\n", n1, n2, n3, nx[lt-1], ny[lt-1]);
 	//processor 0 tracks time and sets up solution matrix
-	init_timers();
-	timer_start(T_init);
+    if(global_params->mpi_rank==0){
+        init_timers();
+        timer_start(T_init);
+    }
+	
 	
 	v = alloc3D(n1, n2, n3);
+    
 	gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
 	
 	//Initialize arrays- currently does this in strips
@@ -91,22 +95,23 @@ int main(int argc, const char **argv)
 		global_params->mpi_size,
 		false //don't put a buffer on this!
 	);
-	
-	timer_stop(T_init);
-	timer_start(T_bench);
-	
+    
+    MPI_Barrier(MPI_COMM_WORLD);
+    if(global_params->mpi_rank==0){
+        timer_stop(T_init);
+        timer_start(T_bench);
+    }
+
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	
-	if(global_params->mpi_rank != 0){
-		printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
-	}
-	
-
-
+	//if(global_params->mpi_rank != 0){
+	//	printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
+	//}
+    
 	//each processor runs the multigrid algorithm
-	
     for(it=1;it<=nit;it++) {
 		//actual call to multigrid
+        //MPI_Barrier(MPI_COMM_WORLD);
 		mg3P(u,local_v,r,a,c,n1,n2,(n3-2)/global_params->mpi_size + 2,0);
 		//compute the residual error here...
 		//only pass in the spliced portion of v...
@@ -117,18 +122,21 @@ int main(int argc, const char **argv)
 	//processor 1 interprets results
 	//TODO : test/correct and verify this works.  Also needs to handle more than just 2 processors case
     
-    timer_stop(T_bench);
-    tinit = timer_elapsed(T_init);
-    printf(" Initialization time: %f seconds\n", tinit);
-
-    //rnm2 = norm2u3(r[0], n1, n2, n3, nx[lt-1],ny[lt-1],nz[lt-1]*global_params->mpi_size);
+    MPI_Barrier(MPI_COMM_WORLD);
+    if(global_params->mpi_rank==0){
+        timer_stop(T_bench);
+        tinit = timer_elapsed(T_init);
+        printf(" Initialization time: %f seconds\n", tinit);
+    }
+    
+    rnm2 = norm2u3(r[0], n1, n2, (n3-2)/global_params->mpi_size +2, nx[lt-1],ny[lt-1],nz[lt-1]*global_params->mpi_size);
     // rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
-    double tm = timer_elapsed(T_bench);
 
     //validates the results and prints to console
-    //if(global_params->mpi_rank==0){
-      //  interpret_results(rnm2, global_params, tm);
-    //}
+    if(global_params->mpi_rank==0){
+        double tm = timer_elapsed(T_bench);
+        interpret_results(rnm2, global_params, tm);
+    }
     
     /*
 	if(global_params->mpi_rank == 0){
@@ -177,12 +185,12 @@ int main(int argc, const char **argv)
 	}
     
     */
-	//free3D(v, n1, n2);
+	free3D(v);
 	freeGrids(u);
 	freeGrids(r);
 	
 	MPI_Barrier(MPI_COMM_WORLD);
-	PPF_Print( MPI_COMM_WORLD, "Message from %N - finished\n" );
+	//PPF_Print( MPI_COMM_WORLD, "Message from %N - finished\n" );
 	
 	MPI_Finalize();
 	return 0;
@@ -473,33 +481,24 @@ double norm2u3(REAL*** r,int n1,int n2,int n3, int nx,int ny,int nz)
 	//     and eighth weight at the corners) for inhomogeneous boundaries.
 	//---------------------------------------------------------------------
 	//      double precision r(n1,n2,n3)
-	//double rnmu = 0.0;
+	
 	REAL local_rnm2 = 0.0, global_rnm2=0.0;
 	int i1,i2,i3;
-	//double localmax;
 	
-	//localmax = 0;
 	for(i3=1;i3<n3-1;i3++)
 	{
-		//double localmax = 0;
 		for(i2=1;i2<n2-1;i2++)
 		{
 			for(i1=1;i1<n1-1;i1++)
 			{
 				local_rnm2 += r[i3][i2][i1]*r[i3][i2][i1];
-				//absolute value of floating point
-				//double a = fabs(r[i3][i2][i1]);
-				//max of floating point
-				//localmax = fmax(localmax,a);
 			}
 		}
 	}
 		
-	//rnmu=fmax(rnmu,localmax);
-	
-    MPI_Reduce(&local_rnm2, &global_rnm2, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&local_rnm2, &global_rnm2, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     if(global_params->mpi_rank==0){
-	   global_rnm2 = sqrt( global_rnm2 / ((double) nx*ny*nz ));
+	    global_rnm2 = sqrt( global_rnm2 / ((double) nx*ny*nz ));
     }
 	
 	return global_rnm2;

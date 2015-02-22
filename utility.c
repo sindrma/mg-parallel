@@ -308,18 +308,17 @@ REAL ***alloc3D(int n, int m,int k)
             m_buffer[z][y] = m_tempzyx;
         }
     }
-
     return m_buffer;
 }
 
-void free3D_old(REAL*** arr)
+void free3D(REAL*** arr)
 {
     free(arr[0][0]);
     free(arr[0]);
     free(arr);
 }
 
-void free3D(REAL*** arr, int n, int m){
+void free3D_old(REAL*** arr, int n, int m){
     int i,j;
     for(i=0; i<n; i++){
         for(j=0; j<m; j++){
