@@ -96,7 +96,7 @@ int main(int argc, const char **argv)
 		false //don't put a buffer on this!
 	);
     
-    MPI_Barrier(MPI_COMM_WORLD);
+    //MPI_Barrier(MPI_COMM_WORLD);
     if(global_params->mpi_rank==0){
         timer_stop(T_init);
         timer_start(T_bench);
@@ -114,7 +114,7 @@ int main(int argc, const char **argv)
     for(it=1;it<=nit;it++) {
 		//actual call to multigrid
         //MPI_Barrier(MPI_COMM_WORLD);
-		//mg3P(u,local_v,r,a,c,n1,n2,(n3-2)/global_params->mpi_size + 2,0);
+		mg3P(u,local_v,r,a,c,n1,n2,(n3-2)/global_params->mpi_size + 2,0);
 		//compute the residual error here...
 		//only pass in the spliced portion of v...
 		resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
@@ -648,7 +648,6 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 	
 	//Exchange boundary data accross processors
 	exchange(r,m1k,m2k,m3k);
-	
 	//this seems to be incorrect - (it's larger than necessary)
 	//it initializes for the largest possible array needed (finest level), instead of adjusting to the current level size
 	x1 = malloc(sizeof(double)*(nm+1));
@@ -977,7 +976,7 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 				}
 				//send/receive front plane
 				MPI_Send(ghost_cells, n1*n2, MPI_DOUBLE, global_params->mpi_size - 1, 1, MPI_COMM_WORLD);
-				MPI_Recv(message,n1*n2,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv(message,n1*n2,MPI_DOUBLE, global_params->mpi_size - 1, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 				
 				for(i2=0;i2<n2;i2++) {
 					for(i1=0;i1<n1;i1++) {
@@ -993,7 +992,7 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 					}
 				}
 				//receive/send back plane
-				MPI_Recv(message,n1*n2,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv(message,n1*n2,MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 				MPI_Send(ghost_cells, n1*n2, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
 				
 				for(i2=0;i2<n2;i2++) {
@@ -1002,6 +1001,9 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 					}
 				}
 			}
+            free(ghost_cells);
+            free(message);
 		}
+        
 	}
 }
