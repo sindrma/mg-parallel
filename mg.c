@@ -102,6 +102,7 @@ int main(int argc, const char **argv)
         timer_start(T_bench);
     }
 
+    //PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d\n", n1, n2, n3 );
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	
 	//if(global_params->mpi_rank != 0){
@@ -109,10 +110,11 @@ int main(int argc, const char **argv)
 	//}
     
 	//each processor runs the multigrid algorithm
+    
     for(it=1;it<=nit;it++) {
 		//actual call to multigrid
         //MPI_Barrier(MPI_COMM_WORLD);
-		mg3P(u,local_v,r,a,c,n1,n2,(n3-2)/global_params->mpi_size + 2,0);
+		//mg3P(u,local_v,r,a,c,n1,n2,(n3-2)/global_params->mpi_size + 2,0);
 		//compute the residual error here...
 		//only pass in the spliced portion of v...
 		resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
@@ -129,6 +131,7 @@ int main(int argc, const char **argv)
         printf(" Initialization time: %f seconds\n", tinit);
     }
     
+    PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nx=%d, ny=%d, nz=%d\n", n1, n2, n3, nx[lt-1],ny[lt-1],nz[lt-1] );
     rnm2 = norm2u3(r[0], n1, n2, (n3-2)/global_params->mpi_size +2, nx[lt-1],ny[lt-1],nz[lt-1]*global_params->mpi_size);
     // rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
 
@@ -689,7 +692,7 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 void exchange(REAL ***r, int n1,int n2,int n3 ){
 	REAL ** ghost_data = getGhostCells(r,n1,n2,n3);
 	//just send the x*y planes- not including the buffer
-	int messageSize = (n1)*(n2);
+	int messageSize = n1*n2;
 	int i1,i2;
 	REAL ** results = exchange_data(ghost_data,messageSize);
 	
@@ -704,6 +707,8 @@ void exchange(REAL ***r, int n1,int n2,int n3 ){
 			}
 		}
 	}
+    free2D(ghost_data, 2);
+    free2D(results, 2);
     
 }
 
@@ -979,7 +984,8 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 						u[0][i2][i1] = message[(i2)*(n1) + i1];
 					}
 				}
-			} else {	
+			}
+            if(global_params->mpi_rank == global_params->mpi_size-1){	
 				//get last plane
 				for(i2=0;i2<n2;i2++) {
 					for(i1=0;i1<n1;i1++) {

@@ -51,12 +51,42 @@ REAL ** exchange_data(REAL** data,int size){
 	REAL ** messages = (REAL**) malloc(sizeof(REAL**)*2);
 	messages[0] = (REAL*) malloc(sizeof(REAL*)*size);
 	messages[1] = (REAL*) malloc(sizeof(REAL*)*size);
+    
+    MPI_Request lr_req = MPI_REQUEST_NULL, rr_req = MPI_REQUEST_NULL; 
+    MPI_Status status;
+    MPI_Request ls_req = MPI_REQUEST_NULL, rs_req = MPI_REQUEST_NULL;
+    
+    // initiate receive from the left and send to the left
+    if(global_params->mpi_rank != 0){
+        //MPI_Request lr_req, rr_req;
+        MPI_Irecv(messages[0],size, MPI_DOUBLE, global_params->mpi_rank - 1, 1,MPI_COMM_WORLD,&lr_req);
+        MPI_Isend(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, 1, MPI_COMM_WORLD,&ls_req);
+        
+    }
+    
+    // initiate receive from the right and send to the right
+    if(global_params->mpi_rank != global_params->mpi_size-1){
+        //MPI_Request ls_req, rs_req;
+        MPI_Irecv(messages[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1,MPI_COMM_WORLD,&rr_req);
+        MPI_Isend(data[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD,&rs_req);
+        
+    }
+    
+    MPI_Wait(&lr_req, &status);
+    MPI_Wait(&rr_req, &status);
+    MPI_Wait(&ls_req, &status);
+    MPI_Wait(&rs_req, &status);
+    
+    
+    /*
 	if(global_params->mpi_rank%2 == 0){
 		if(global_params->mpi_rank != 0){
 			//send left data
 			MPI_Send(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, 1, MPI_COMM_WORLD);
+            //MPI_Isend(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_REQUEST_NULL)
 			//receive left data
 			MPI_Recv(messages[0],size,MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            
 		}
 		if(global_params->mpi_rank != (global_params->mpi_size - 1)){
 			//send right data
@@ -76,6 +106,8 @@ REAL ** exchange_data(REAL** data,int size){
 			MPI_Send(data[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD);
 		}
 	}
+    */
+    
 	return messages;
 }
 
