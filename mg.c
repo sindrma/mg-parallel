@@ -9,11 +9,6 @@
 	-n	: problem size
 	-nit	: number of iterations
 	-lt	: sets the lt... i think this defines how large the "W" cycle is?
-	
-	FUNCTIONS TO VERIFY:
-	-RESID: VERIFIED
-	-RPRJ3_MPI: NOT VERIFIED
-	-RESID: NOT VERIFIED
 */
 
 #include <omp.h>
@@ -68,13 +63,12 @@ int main(int argc, const char **argv)
 	//setup initializes some of the variables used...
 	grid_t grid;
 	setup(&n1, &n2, &n3, &grid);
-	//PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nxk=%d, nyk=%d\n", n1, n2, n3, nx[lt-1], ny[lt-1]);
+	PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nxk=%d, nyk=%d\n", n1, n2, n3, nx[lt-1], ny[lt-1]);
 	//processor 0 tracks time and sets up solution matrix
     if(global_params->mpi_rank==0){
         init_timers();
         timer_start(T_init);
     }
-	
 	
 	v = alloc3D(n1, n2, n3);
     
@@ -95,8 +89,10 @@ int main(int argc, const char **argv)
 		global_params->mpi_size,
 		false //don't put a buffer on this!
 	);
+	//exchange local_v data
+	exchange(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
+	comm3(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
     
-    //MPI_Barrier(MPI_COMM_WORLD);
     if(global_params->mpi_rank==0){
         timer_stop(T_init);
         timer_start(T_bench);
@@ -105,11 +101,9 @@ int main(int argc, const char **argv)
     //PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d\n", n1, n2, n3 );
     
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
-	
-	//if(global_params->mpi_rank != 0){
-	//	printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
-	//}
-    
+	//     if(global_params->mpi_rank == 1){
+	// 	printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
+	// }
 	//each processor runs the multigrid algorithm
     
     for(it=1;it<=nit;it++) {
@@ -120,11 +114,7 @@ int main(int argc, const char **argv)
 		//only pass in the spliced portion of v...
         //exchange()
 		resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
-
 	}
-	
-	//processor 1 interprets results
-	//TODO : test/correct and verify this works.  Also needs to handle more than just 2 processors case
     
     MPI_Barrier(MPI_COMM_WORLD);
     if(global_params->mpi_rank==0){
@@ -143,59 +133,11 @@ int main(int argc, const char **argv)
         interpret_results(rnm2, global_params, tm);
     }
     
-    /*
-	if(global_params->mpi_rank == 0){
-		timer_stop(T_bench);
-		tinit = timer_elapsed(T_init);
-		printf(" Initialization time: %f seconds\n", tinit);
-		
-		//combine r results from each processor
-		REAL * message = (REAL*) malloc(sizeof(REAL*)*n1*n2*((n3-2)/global_params->mpi_size+2));
-		MPI_Recv(message,n1*n2*((n3-2)/global_params->mpi_size+2),MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		
-		// unflatten message into 3d matrix
-		REAL *** strip = unflattenMatrix(message,n1,n2,(n3-2)/global_params->mpi_size+2);
-		
-		//combine results
-		int i1,i2,i3;
-		int z_size = (n3-2)/global_params->mpi_size+2;
-		REAL *** result = alloc3D((n1),(n2),(n3));
-		//copy results over to result matrix
-		for(i3=0;i3<(z_size-1);i3++){
-			for(i2=0;i2<n2;i2++){
-				for(i1=0;i1<n1;i1++){
-					result[i3][i2][i1] = r[0][i3][i2][i1];
-				}
-			}
-		}
-		//copy matrix 2
-		for(i3=(z_size);i3<n3+1;i3++){
-			for(i2=0;i2<n2;i2++){
-				for(i1=0;i1<n1;i1++){
-					result[i3-1][i2][i1] = strip[i3 - (z_size-1)][i2][i1];
-				}
-			}
-		}
-		// printMatrix(result,n1,n2,n3);
-		// printMatrix(r[0],n1,n2,n3);
-		rnm2=norm2u3(result,n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]*global_params->mpi_size);
-		double tm = timer_elapsed(T_bench);
-
-		//validates the results and prints to console
-		//interpret_results(rnm2, global_params, tm);
-	} else {
-		//send residual result
-		REAL * message = flattenMatrix(r[0],n1,n2,((n3-2)/global_params->mpi_size+2));
-		MPI_Send(message, (n1)*(n2)*((n3-2)/global_params->mpi_size+2), MPI_DOUBLE, 0, global_params->mpi_rank, MPI_COMM_WORLD);
-	}
-    
-    */
 	free3D(v);
 	freeGrids(u);
 	freeGrids(r);
 	
 	MPI_Barrier(MPI_COMM_WORLD);
-	//PPF_Print( MPI_COMM_WORLD, "Message from %N - finished\n" );
 	
 	MPI_Finalize();
 	return 0;
@@ -502,7 +444,9 @@ double norm2u3(REAL*** r,int n1,int n2,int n3, int nx,int ny,int nz)
 	}
 		
     MPI_Reduce(&local_rnm2, &global_rnm2, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
     if(global_params->mpi_rank==0){
+		// printf("\nNZ=%d\nN3=%d",nz,n3);
 	    global_rnm2 = sqrt( global_rnm2 / ((double) nx*ny*nz ));
     }
 	
@@ -656,6 +600,7 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 	
 	//Exchange boundary data accross processors
 	exchange(r,m1k,m2k,m3k);
+	
 	//this seems to be incorrect - (it's larger than necessary)
 	//it initializes for the largest possible array needed (finest level), instead of adjusting to the current level size
 	x1 = malloc(sizeof(double)*(nm+1));
@@ -985,8 +930,8 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 					}
 				}
 				//send/receive front plane
-				MPI_Send(ghost_cells, n1*n2, MPI_DOUBLE, global_params->mpi_size - 1, 1, MPI_COMM_WORLD);
-				MPI_Recv(message,n1*n2,MPI_DOUBLE, global_params->mpi_size - 1, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Send(ghost_cells, n1*n2, MPI_DOUBLE, global_params->mpi_size - 1, 3, MPI_COMM_WORLD);
+				MPI_Recv(message,n1*n2,MPI_DOUBLE, global_params->mpi_size - 1, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 				
 				for(i2=0;i2<n2;i2++) {
 					for(i1=0;i1<n1;i1++) {
@@ -1002,8 +947,8 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 					}
 				}
 				//receive/send back plane
-				MPI_Recv(message,n1*n2,MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				MPI_Send(ghost_cells, n1*n2, MPI_DOUBLE, 0, 1, MPI_COMM_WORLD);
+				MPI_Recv(message,n1*n2,MPI_DOUBLE, 0, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Send(ghost_cells, n1*n2, MPI_DOUBLE, 0, 3, MPI_COMM_WORLD);
 				
 				for(i2=0;i2<n2;i2++) {
 					for(i1=0;i1<n1;i1++) {
