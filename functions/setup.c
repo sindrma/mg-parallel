@@ -41,8 +41,8 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 		nz[k]=ng[2+k*size1];
 	}
     
-    for(k=lt-1;k<=0;k++){
-        nz[k] = nz[lt-1] / global_params->mpi_size;   
+    for(k=lt-1;k<=0;k--){
+        nz[k] = nz[k] / global_params->mpi_size;   
     }
 	
 	for(k=lt-1;k>=0;k--) {

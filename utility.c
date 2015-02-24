@@ -7,18 +7,14 @@
 void printMatrix(REAL *** mat,int x,int y,int z){
 	int i1,i2,i3;
 	for(i3=0;i3<z;i3++){
-		// sprintf (buffer, "\n  z=%d", i3);
 		printf("\n  z=%d", i3);
 		for(i2=0;i2<y;i2++){
-			// sprintf (buffer + strlen(buffer), "\n");
 			printf("\n");
 			for(i1=0;i1<x;i1++){
-				// sprintf (buffer + strlen(buffer), "%f ", mat[i3][i2][i1]);
 				printf("%f ", mat[i3][i2][i1]);
 			}
 		}
 	}
-	// PPF_Print( MPI_COMM_WORLD, buffer );
 }
 
 //merges striped matrices together
@@ -60,54 +56,22 @@ REAL ** exchange_data(REAL** data,int size){
     // initiate receive from the left and send to the left
     if(global_params->mpi_rank != 0){
         //MPI_Request lr_req, rr_req;
-        MPI_Irecv(messages[0],size, MPI_DOUBLE, global_params->mpi_rank - 1, 1,MPI_COMM_WORLD,&lr_req);
-        MPI_Isend(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, 1, MPI_COMM_WORLD,&ls_req);
-        
+        MPI_Irecv(messages[0],size, MPI_DOUBLE, global_params->mpi_rank - 1, 1,MPI_COMM_WORLD, &lr_req);
+        MPI_Isend(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, 2, MPI_COMM_WORLD, &ls_req);
     }
     
     // initiate receive from the right and send to the right
     if(global_params->mpi_rank != global_params->mpi_size-1){
         //MPI_Request ls_req, rs_req;
-        MPI_Irecv(messages[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1,MPI_COMM_WORLD,&rr_req);
+        MPI_Irecv(messages[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 2,MPI_COMM_WORLD,&rr_req);
         MPI_Isend(data[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD,&rs_req);
-        
     }
     
     MPI_Wait(&lr_req, &status);
-    MPI_Wait(&rr_req, &status);
     MPI_Wait(&ls_req, &status);
+    MPI_Wait(&rr_req, &status);
     MPI_Wait(&rs_req, &status);
     
-    
-    /*
-	if(global_params->mpi_rank%2 == 0){
-		if(global_params->mpi_rank != 0){
-			//send left data
-			MPI_Send(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, 1, MPI_COMM_WORLD);
-            //MPI_Isend(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_REQUEST_NULL)
-			//receive left data
-			MPI_Recv(messages[0],size,MPI_DOUBLE, global_params->mpi_rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            
-		}
-		if(global_params->mpi_rank != (global_params->mpi_size - 1)){
-			//send right data
-			MPI_Send(data[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD);
-			//receive right data
-			MPI_Recv(messages[1],size,MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		}
-	} else {
-		//receive left data
-		MPI_Recv(messages[0],size,MPI_DOUBLE, global_params->mpi_rank-1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		//send left data
-		MPI_Send(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, 1, MPI_COMM_WORLD);
-		if(global_params->mpi_rank != (global_params->mpi_size - 1)){
-			//receive right data
-			MPI_Recv(messages[1],size,MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			//send right data
-			MPI_Send(data[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD);
-		}
-	}
-    */
     
 	return messages;
 }
@@ -117,10 +81,6 @@ REAL ** exchange_data(REAL** data,int size){
 REAL ** getGhostCells(REAL*** mat,int x,int y, int z){
 	int i2,i1;
 	int offset = (x)*(y); //plane size
-	//in strips the ghost cells consists of two planes
-	//REAL ** ghost_cells = (REAL**) malloc(sizeof(REAL*)*2);
-	//ghost_cells[0] = (REAL*) malloc(sizeof(REAL)*offset);
-	//ghost_cells[1] = (REAL*) malloc(sizeof(REAL)*offset);
     
     REAL **ghost_cells = alloc2D(2, offset);
 	
@@ -144,24 +104,16 @@ REAL ** getGhostCells(REAL*** mat,int x,int y, int z){
 //n1,n2,n3 are input
 REAL *** splitMatrix(REAL*** mat,int x,int y,int z,int processorID,int size,bool addBuffer){
 	int i3,i2,i1;
-	int offset = (z/size) * processorID;
+	int z_size = (z - 2) / size + 2; //130
+	int offset = (z_size - 2) * processorID; //128 offset per processor
 	//allocate 3D strip matrix
-	int z_size = (z-2)/size+2; //130
 	
 	REAL*** strip = alloc3D(x,y,z_size);
 	
-	int start_o = processorID == size - 1 ? 1 : 2;
-	if(processorID == 0){
-		start_o = 0;
-	}
-	// printf("SIZES: z=%d, y=%d, x=%d",z_size,y,x);
-	// printf("offset=%d, s=%d",offset,start_o);
-	
-	for(i3=0;i3<z_size;i3++){
-		// printf("SIZES: i3=%d",i3);
-		for(i2=0;i2<y;i2++){
-			for(i1=0;i1<x;i1++){
-				strip[i3][i2][i1] = mat[i3 + offset - start_o][i2][i1];
+	for(i3=1;i3<z_size-1;i3++){
+		for(i2=1;i2<y-1;i2++){
+			for(i1=1;i1<x-1;i1++){
+				strip[i3][i2][i1] = mat[i3 + offset][i2][i1];
 			}
 		}
 	}
