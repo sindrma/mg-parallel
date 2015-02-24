@@ -103,6 +103,7 @@ int main(int argc, const char **argv)
     }
 
     //PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d\n", n1, n2, n3 );
+    
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	
 	//if(global_params->mpi_rank != 0){
@@ -117,6 +118,7 @@ int main(int argc, const char **argv)
 		mg3P(u,local_v,r,a,c,n1,n2,(n3-2)/global_params->mpi_size + 2,0);
 		//compute the residual error here...
 		//only pass in the spliced portion of v...
+        //exchange()
 		resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 
 	}
@@ -132,7 +134,7 @@ int main(int argc, const char **argv)
     }
     
     PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nx=%d, ny=%d, nz=%d\n", n1, n2, n3, nx[lt-1],ny[lt-1],nz[lt-1] );
-    rnm2 = norm2u3(r[0], n1, n2, (n3-2)/global_params->mpi_size +2, nx[lt-1],ny[lt-1],nz[lt-1]*global_params->mpi_size);
+    rnm2 = norm2u3(r[0], n1, n2, (n3-2)/global_params->mpi_size +2, nx[lt-1],ny[lt-1],nz[lt-1]);
     // rnm2=norm2u3(r[0],n1,n2,n3,nx[lt-1],ny[lt-1],nz[lt-1]);
 
     //validates the results and prints to console
@@ -593,6 +595,7 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//MEMORY TODO : check m1,m2,m3
 	for(k=lt-1-restriction;k>=1;k--) {
 		j = k-1;
+        //exchange()
 		rprj3_mpi(r[lt-1-k],m1[k],m2[k],m3[k],r[lt-1-j],m1[j],m2[j],m3[j]);
 		//ERROR HAS HAPPENED BY THIS TIME- it looks like the last matrix is not filled out
 		// if(global_params->mpi_rank == 0 && k==lt-1){
@@ -605,6 +608,7 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//     compute an approximate solution on the coarsest grid
 	//---------------------------------------------------------------------
 	zero3(u[lt-1-k],m1[k],m2[k],m3[k]);
+    //exchange()
 	psinv(r[lt-1-k],u[lt-1-k],m1[k],m2[k],m3[k], c);
 	
 	for(k=1;k<lt-1-restriction;k++) {
@@ -613,22 +617,26 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 		//        prolongate from level k-1  to k
 		//---------------------------------------------------------------------
 		zero3(u[lt-1-k],m1[k],m2[k],m3[k]);
-		
+		//exchange()
 		interp_mpi(u[lt-1-j],m1[j],m2[j],m3[j],u[lt-1-k], m1[k],m2[k],m3[k]);
 		//---------------------------------------------------------------------
 		//        compute residual for level k
 		//---------------------------------------------------------------------
+        //exchange()
 		resid(u[lt-1-k],r[lt-1-k],r[lt-1-k],m1[k],m2[k],m3[k], a);
 		//---------------------------------------------------------------------
 		//        apply smoother
 		//---------------------------------------------------------------------
+        //exchange()
 		psinv(r[lt-1-k],u[lt-1-k],m1[k],m2[k],m3[k],c);
 	}
 	j = lt - 2;
 	k = lt - 1;
-	
+	//exchange()
 	interp_mpi(u[lt-1-j],m1[j],m2[j],m3[j],u[0], n1,n2,n3);
+    //exchange()
 	resid(u[0],v,r[0],n1,n2,n3, a);
+    //exchange()
 	psinv(r[0],u[0],n1,n2,n3,c);
 }
 /*NOTE: rprj3 projects onto the next coarser grid*/
@@ -938,6 +946,8 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 	int i1, i2, i3;
 	int isLast = (global_params->mpi_rank == global_params->mpi_size - 1 ? 1:0);
 	int isFirst = (global_params->mpi_rank == 0 ? 1:0);
+    //int isLast = 1;
+	//int isFirst = 0;
 	for(i3=isFirst;i3<n3-isLast;i3++) {
 		for(i2=isFirst;i2<n2-isLast;i2++) {
 			u[i3][i2][0] = u[i3][i2][n1-2];

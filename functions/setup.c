@@ -112,6 +112,7 @@ struct params* setup_local(int argc, const char **argv)
 				printf ("error - not an integer");
 			} else {
 				//TODO : add lt>maxlevel check (it's in the original code)
+                
 				
 			}
 		}
