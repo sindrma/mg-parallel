@@ -1,6 +1,3 @@
-#ifndef __NPBPARAMS__
-#define __NPBPARAMS__
-
 #define CLASS 'A'
 #include <stdbool.h>
 
@@ -20,7 +17,7 @@ in this directory. Do not modify it by hand.
         const int ndim2 = 8; 
         const int ndim3 = 8; 
         const bool convertdouble = false;
-        const char* compiletime = "08 Feb 2015";
+        const char* compiletime = "24 Feb 2015";
         const char* npbversion = "3.0";
         const char* cs1 = "f77";
         const char* cs2 = "f77";
@@ -29,4 +26,3 @@ in this directory. Do not modify it by hand.
         const char* cs5 = "-O";
         const char* cs6 = "(none)";
         const char* cs7 = "randi8";
-#endif

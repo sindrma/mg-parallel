@@ -1,0 +1,127 @@
+Parallel print function
+30 April 98
+John May (johnmay@llnl.gov)
+Lawrence Livermore National Laboratory
+
+This function merges, sorts, and labels the output of print statements
+issued from multiple nodes of a parallel program.  It has both C and
+Fortran interfaces.  It requires:
+
+1. A Unix system
+2. An MPI message-passing library
+3. An ANSI C compiler
+4. A Fortran 77 compiler (only to build the Fortran test program)
+
+To build the system, run ./configure and then make.  If all goes
+well, you will get a library called libptools_ppf.a and two test
+programs, testprint and testfortran.  To verify that the system
+was compiled successfully, run both programs on at least 4 nodes
+using the standard method for starting parallel jobs on your system.
+The output of testprint will be a dozen or so lines showing example
+output from various uses of the C-language interface.  The output
+of testfortran will be just 3 lines of text.
+
+If you have problems configuring or compiling the system, see the
+notes below.
+
+Once you have compiled libptools_ppf.a, you can copy it to any convenient
+location.  You will also need the header file ptools_ppf.h to compile
+your own programs.  To see how to use PPF_Print, look at the two
+example programs.  The programming interface consists of only one C
+function and one Fortran function.  The Fortran function cannot
+format output as the C function can.
+
+When using PPF_Print, note the following:
+
+1. You must include an MPI communicator as the first parameter; all nodes
+	in the communicator group must call the function if any of them
+	does.
+2. You can do formatting with the C function just as you can with printf.
+3. By default, the function prints a list of nodes that generated the same
+	output followed by the line they produced.
+4. You can control where the list of nodes appears in the output by
+	putting %N in the input string.  For example, this lets you
+	put the list of nodes inside brackets.
+5. You can pass a NULL pointer to the C function.  This will produce no
+	output from that node, but will satisfy the requirement that
+	all nodes in the communicator call PPF_Print together.  Do
+	this when you want the program to decide on the fly which nodes
+	will print something.  In a Fortran program, pass a character
+	array consisting of a single space (' ') to get this effect.
+
+Some restrictions:
+
+1. The formatted output string (excluding the list of nodes) must be less
+	than 255 characters.
+2. The output string may not contain ASCII codes 1 or 2 (these are
+	nonprinting characters, so you wouldn't normally use them
+	anyway).
+3. Only one %N in a string is replaced with the list of nodes.  If
+	more than one %N appears in a string, the second and later
+	ones are printed as "%".
+4. There is currently no way to suppress the list of nodes from
+	the output.  If no %N appears in the string, the list
+	of nodes is printed at the beginning of the line.
+
+
+NOTES ON NAMES
+
+An earlier version of this package used the names PTC_Print and
+ptc_print for the C and Fortran function calls, libptcprint.a for
+the library, and PTCPrint.h for the public header file.  The names
+were changed to the current versions to conform to the Parallel
+Tools Consortium naming conventions.  If you would prefer to use
+the old names, run the configuration script with the flag
+--with-oldnames.  Then when you run make, a library will be
+generated that uses the old names, and the header file
+ptools_ppf.h will be copied into a file called PTCPrint.h .  The
+test programs will also be compiled to use the old names instead
+of the new ones.
+
+
+CONFIGURATION AND COMPILATION
+
+PPF_Print's C interface should be quite portable to MPI systems.  The
+Fortran interface is less portable and has to determine a number of
+parameters at configuration time.  If you have trouble compiling
+PPF_Print and can do without the Fortran interface, run ./configure 
+with the --disable-fortran flag.  Run "./configure --help" to see other
+options; the flags specific to this application are listed at the end
+of the help text.
+
+PPF_Print has been compiled successfully (including the Fortran
+interface) on the following platforms:
+
+IBM RS6000/SP: Both MPICH-1.1 and IBM MPI (under PSSP 2.2 and 2.3) work;
+	configure --with-mpich to compile for MPICH.
+
+DEC Alpha cluster: Both MPICH-1.1 and DEC MPI (under Digital Unix 4.0B) work;
+	configure --with-mpich to compile for MPICH.
+
+Meiko CS-2: MPICH 1.0.13 works; run "./configure sparc" or the configure script
+	will not correctly recognize the Meiko.  Ignore the configuraion
+	warning about failing to find the size of void *.
+
+SGI Origin 2000 & Onyx: SGI MPI works on Onyx, reported to work on O2K;
+	not tested with MPICH; use --with-cflags, --with-fflags, and
+	--with-ldflags configuration options to specify the correct ABI
+	(-o32, -n32, -64) as needed.
+
+ACKNOWLEGEMENTS
+
+This software and documentation are Copyright (c) 1996-1998
+Regents of the University of California.  See COPYRIGHT-LLNL
+for details.
+
+Some of the configuration tricks, especially for dealing with Fortran-
+to-C conversion, have been adapted from MPICH and ROMIO's configuration
+packages.  See COPYRIGHT-MPICH for the copyright that applies to that
+code.
+
+UPDATES
+
+30 April 98	Fix errors in config script relating to Fortran flags.
+		Add a barrier after the independent writes in testprint
+		so writes don't dribble out into subsequent tests.
+		Add "distclean" target to Makefile to remove all generated
+		files.

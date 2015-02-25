@@ -119,3 +119,56 @@ void interpret_results(double rnm2,struct params* global, double tm){
 
 	print_results(&res, stdout);
 }
+
+//OLD MPI CODE
+
+/*
+	// REAL number;
+	// REAL * tempa = (REAL*) malloc(sizeof(REAL)*10);
+	REAL * tempdzyx = (REAL*) malloc(sizeof(REAL)*n1*n2*n3);
+	//assign values to temp
+	int i3, i2, i1;
+	double ***z = u[0];
+	//maps 3-D to 1-D array for transmission
+	for(i3=0;i3<n3;i3++){
+	        for(i2=0;i2<n2;i2++){
+	            for(i1=0;i1<n1;i1++){
+				tempdzyx[i3*n1*n2 + i2*n1 + i1] = z[i3][i2][i1];
+			}
+		}
+	}
+	//making the first element 0.1 because it will probably be 0.0- which makes it hard to tell if it actually transmitted correctly
+	tempdzyx[0] = 0.1;
+	REAL * tempa = (REAL*) malloc(sizeof(REAL)*10);
+	for(i1=0;i1<10;i1++){
+		tempa[i1] = tempdzyx[i1] + 1.0;
+	}
+
+	number = -1.5;
+	// MPI_Send(&number, 1, MPI_DOUBLE, 1, 0, MPI_COMM_WORLD);
+	// MPI_Send(tempa, 10, MPI_DOUBLE, 1, 0, MPI_COMM_WORLD);
+	MPI_Send(tempdzyx, n1*n2*n3, MPI_DOUBLE, 1, 0, MPI_COMM_WORLD);
+*/
+
+/*
+} else {
+	// PPF_Print( MPI_COMM_WORLD, "Its the other processor!" );
+	// REAL number;
+	// REAL * tempa = (REAL*) malloc(sizeof(REAL)*10);
+	REAL * tempdzyx = (REAL*) malloc(sizeof(REAL)*258*258*258);
+	// MPI_Recv(&number, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+	// MPI_Recv(tempa, 10, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+	MPI_Recv(tempdzyx, 258*258*258, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+	PPF_Print( MPI_COMM_WORLD,"Process 1 received number %f from process 0\n", tempdzyx[0]);
+	// PPF_Print( MPI_COMM_WORLD,"Processor receive succes\n");
+}
+/*
+PPF_Print( MPI_COMM_WORLD, "Message from %N\n" );
+PPF_Print( MPI_COMM_WORLD, (mpi_rank < (mpi_size/2) )
+			? "Message from first half of nodes (%N)\n"
+			: "Message from second half of nodes\n" );
+PPF_Print( MPI_COMM_WORLD, (mpi_rank % 2)
+			? "[%N] Message from odd numbered nodes\n"
+			: "[%N] Message from even numbered nodes\n" );
+
+*/

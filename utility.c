@@ -44,13 +44,15 @@ REAL *** merge_matrices(REAL*** mat1, REAL *** mat2,int x1, int y1, int z1, int 
 
 //even processors send data first and then receive while odd ones are in the other order.
 REAL ** exchange_data(REAL** data,int size){
-	REAL ** messages = (REAL**) malloc(sizeof(REAL**)*2);
-	messages[0] = (REAL*) malloc(sizeof(REAL*)*size);
-	messages[1] = (REAL*) malloc(sizeof(REAL*)*size);
+	//REAL ** messages = (REAL**) malloc(sizeof(REAL**)*2);
+	//messages[0] = (REAL*) malloc(sizeof(REAL*)*size);
+	//messages[1] = (REAL*) malloc(sizeof(REAL*)*size);
+    
+    REAL **messages = alloc2D(2, size);
     
     MPI_Request lr_req = MPI_REQUEST_NULL, rr_req = MPI_REQUEST_NULL; 
-    MPI_Status status;
     MPI_Request ls_req = MPI_REQUEST_NULL, rs_req = MPI_REQUEST_NULL;
+    MPI_Status status;
     
     // initiate receive from the left and send to the left
     if(global_params->mpi_rank != 0){
@@ -70,6 +72,7 @@ REAL ** exchange_data(REAL** data,int size){
     MPI_Wait(&ls_req, &status);
     MPI_Wait(&rr_req, &status);
     MPI_Wait(&rs_req, &status);
+    
     
 	return messages;
 }
