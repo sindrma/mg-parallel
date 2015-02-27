@@ -139,7 +139,9 @@ int main(int argc, const char **argv)
 		false //don't put a buffer on this!
 	);
 	//exchange local_v data
-	exchange(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
+    if(global_params->mpi_size > 1){
+        exchange(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
+    }
 	comm3(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
 	
 	// if(global_params->mpi_rank == 0){
@@ -586,7 +588,7 @@ void resid(REAL ***u, REAL*** v, REAL*** r,
 	//		1- accross processors
 	//		2- accross strips
 	//---------------------------------------------------------------------
-	exchange(r,n1,n2,n3);
+	//exchange(r,n1,n2,n3);
 	comm3(r,n1,n2,n3);
 }
 
@@ -660,7 +662,7 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 	int receiveCount = 2;
 	
 	//Exchange boundary data accross processors
-	exchange(r,m1k,m2k,m3k);
+	//exchange(r,m1k,m2k,m3k);
 	
 	//this seems to be incorrect - (it's larger than necessary)
 	//it initializes for the largest possible array needed (finest level), instead of adjusting to the current level size
@@ -758,7 +760,7 @@ void interp_mpi(REAL ***z, int mm1, int mm2, int mm3, REAL ***u,
 	static bool interp_init = false;
 	
 	//Exchange boundary data accross processors
-	exchange(z,mm1,mm2,mm3);
+	//exchange(z,mm1,mm2,mm3);
 	
 	//Private arrays for each thread
 	static double **_z1;
@@ -987,7 +989,7 @@ void psinv(REAL*** r, REAL*** u, int n1,int n2,int n3, double c[4])
     //     exchange boundary points
     //---------------------------------------------------------------------
 	//Exchange boundary data accross processors
-	exchange(u,n1,n2,n3);
+	//exchange(u,n1,n2,n3);
     comm3(u,n1,n2,n3);
 }
 
@@ -1000,8 +1002,10 @@ void comm3(REAL*** u,int n1,int n2,int n3)
 	int i1, i2, i3;
 	int isLast = (global_params->mpi_rank == global_params->mpi_size - 1 ? 1:0);
 	int isFirst = (global_params->mpi_rank == 0 ? 1:0);
-
     
+    if(global_params->mpi_size > 1){
+        exchange(u,n1,n2,n3);
+    }
     #pragma omp parallel private(i1,i2,i3, isLast, isFirst)
     {
         #pragma omp for

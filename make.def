@@ -75,4 +75,4 @@ WTIME  = wtime.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(PROGRAM): $(OBJS)
-	$(CC) -o $@ $(OBJS) $(LDFLAGS) -L lib -lptools_ppf
+	$(CC) -o  $@ $(OBJS) $(LDFLAGS)

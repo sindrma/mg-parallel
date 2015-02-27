@@ -115,11 +115,11 @@ struct params* setup_local(int argc, const char **argv)
 				
 			}
 		}
-		if (strcmp(argv[nArg],"-s") == 0) {
-			if (sscanf (argv[nArg + 1], "%f", &p->seed)!=1) {
-				printf ("error - not a float");
-			}
-		}
+		//if (strcmp(argv[nArg],"-s") == 0) {
+		//	if (sscanf (argv[nArg + 1], "%f", &p->seed)!=1) {
+		//		printf ("error - not a float");
+		//	}
+		//}
 		
 	}
 	
