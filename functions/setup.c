@@ -90,8 +90,11 @@ struct params* setup_local(int argc, const char **argv)
 	p->lt 		= 8;
 	p->seed		= 314159265.0;
 	p->class	= 'U';
+    //p->mpi_size = 1;
 	MPI_Comm_rank( MPI_COMM_WORLD, &p->mpi_rank );
 	MPI_Comm_size( MPI_COMM_WORLD, &p->mpi_size );
+    p->mpi_orig_size = p->mpi_size;
+    p->active = true;
 	
 	//check command line input for manual entry
 	for (nArg=1; nArg < argc; nArg+=2){

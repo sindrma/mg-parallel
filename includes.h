@@ -58,6 +58,9 @@
 	int m3[maxlevel];
 	int lt, lb;
 
+    //---------------------------------------------------------------------
+    int *split_levels;
+
 	//---------------------------------------------------------------------
 	//  Set at m=1024, can handle cases up to 1024^3 case
 	//---------------------------------------------------------------------
@@ -74,6 +77,8 @@
 		int lt;		//threads requested? not sure if this is correct
 		int mpi_size;	//# of processors available
 		int mpi_rank;	//processor id
+        int mpi_orig_size;
+        bool active;
 		double seed;	//seed used to generate random indices
 		char class;	//class of test- legacy code
 		int geometry[3];//geometry of how the data is split - *UNIMPLEMENTED*

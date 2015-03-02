@@ -67,6 +67,8 @@
 #include "timer.h"
 #include "mg.h"
 
+#define MIN_ELEMS_PER_PROC 2
+
 //Some global constants
 const char * BMName="MG"; //Benchmark name
 
@@ -111,13 +113,13 @@ int main(int argc, const char **argv)
 	//setup initializes some of the variables used...
 	grid_t grid;
 	setup(&n1, &n2, &n3, &grid);
-	PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nxk=%d, nyk=%d\n", n1, n2, n3, nx[lt-1], ny[lt-1]);
+	//PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nxk=%d, nyk=%d\n", n1, n2, n3, nx[lt-1], ny[lt-1]);
 	//processor 0 tracks time and sets up solution matrix
+    
     if(global_params->mpi_rank==0){
         init_timers();
         timer_start(T_init);
     }
-	
 	
 	v = alloc3D(n1, n2, n3);
     
@@ -125,17 +127,26 @@ int main(int argc, const char **argv)
 	
 	//Initialize arrays- currently does this in strips
 	// printf("N1= %d, N3=%d\n",n1-2,((n3-2) / global_params->mpi_size + 2 + 2));
-	u = allocGrids(lt, n1-2, n2-2, n3-2, 2);
+    //PPF_Print( MPI_COMM_WORLD, "n3=%d\n", n3 );
+    // how the matrixes should be split up from the start.
+    // TODO: write a new alloc function that is smarter than this one....
+    
+	//u = allocGrids(lt, (n1-2)/global_params->mpi_size, n2-2, n3-2, 2);
+	//r = allocGrids(lt, (n1-2)/global_params->mpi_size, n2-2, n3-2, 2);
+    
+    // Just for testing, should be removed in the finished design
+    u = allocGrids(lt, n1-2, n2-2, n3-2, 2);
+    //PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d\n", n1, n2, n3 );
 	r = allocGrids(lt, n1-2, n2-2, n3-2, 2);
 	
-	zero3(u[0],n1,n2,n3 / global_params->mpi_size); //zero-out all of u
+	zero3(u[0],n1,n2,(n3-2) / global_params->mpi_size + 2); //zero-out all of u
 	
 	//create local v (different strip per processor)
 	REAL ***  local_v = splitMatrix(
 		v, //matrix to split
 		n1,n2,n3, //matrix size
 		global_params->mpi_rank,
-		global_params->mpi_size,
+    	global_params->mpi_size,
 		false //don't put a buffer on this!
 	);
 	//exchange local_v data
@@ -143,17 +154,118 @@ int main(int argc, const char **argv)
         exchange(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
     }
 	comm3(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
-	
+    /*
+    int i1,i2,i3, x, y, z;
+	for(i3=0;i3<n3;i3++){
+		for(i2=0;i2<n2;i2++){
+			for(i1=0;i1<n1;i1++){
+                r[0][i3][i2][i1] = i3;
+			}
+		}
+	}
+    
+    for(i3=0;i3<(n3-2)/2 + 2;i3++){
+		for(i2=0;i2<(n2-2)/2 + 2;i2++){
+			for(i1=0;i1<(n1-2)/2 + 2;i1++){
+                r[1][i3][i2][i1] = i3;
+			}
+		}
+	}
+    */
+    //if(global_params->mpi_rank==0){
+    //    printMatrix(r[0], n1, n2, (n3-2)/global_params->mpi_size + 2);
+        //printMatrix(r[0], n1, n2, n3);
+    //}
+    /*
+    int split = 1;
+    for(k=lt-1;k>=1;k--) {
+        MPI_Barrier(MPI_COMM_WORLD);
+        if((m3[k] - 2) < MIN_ELEMS_PER_PROC && global_params->active){
+                MPI_Request req = MPI_REQUEST_NULL;
+                MPI_Status status;
+                REAL* message;
+                global_params->mpi_size = global_params->mpi_size - split;
+                // if not divisible by split, send of your matrix
+                if(global_params->mpi_rank % (split*2) != 0){
+                    global_params->active = false;
+                    //printf("m1=%d, m2=%d, m3=%d\n", m1[lt-1], m2[lt-1], m3[lt-1]);
+                    //printMatrix(r[0], m1[lt-1], m2[lt-1], m3[lt-1]);
+                    message = flattenMatrix(r[lt-1-k], m1[k], m2[k], m3[k]);
+                    MPI_Isend(message, m1[k]*m2[k]*m3[k], MPI_DOUBLE, 
+                              global_params->mpi_rank-split, 4, MPI_COMM_WORLD, &req);
+                    MPI_Wait(&req, &status);
+                }
+                // else recv elements to work on
+                else{
+                    message = (REAL*) malloc(sizeof(REAL)*m1[k]*m2[k]*m3[k]);
+                    MPI_Irecv(message, m1[k]*m2[k]*m3[k]*split, MPI_DOUBLE, 
+                              global_params->mpi_rank + split, 4,MPI_COMM_WORLD, &req);
+                    MPI_Wait(&req, &status);
+                    for(z=1; z<m3[k]; z++){
+                        for(y=0; y<m2[k]; y++){
+                            for(x=0; x<m1[k]; x++){
+                                r[lt-1-k][z + m3[k] - 2][y][x] = message[m2[k]*m1[k]*z + m1[k]*y + x];  
+                            }
+                        }
+                    }
+                   
+                }
+                split *= 2;
+                free(message);
+            }
+         if(global_params->mpi_rank==0) {
+             printf("m1=%d, m2=%d, m3=%d\n", m1[k], m2[k], m3[k]);
+             printMatrix(r[lt-1-k], m1[k], m2[k], m3[k]*2);
+         }
+    }
+    */
+    /*
+    if(m3[0]*split > MIN_ELEMS_PER_PROC){
+            MPI_Request req = MPI_REQUEST_NULL;
+            MPI_Status status;
+            REAL* message;
+            global_params->mpi_size = global_params->mpi_size + split;
+            if(global_params->mpi_rank % (split/2) == 0 && global_params->active){
+                // send data
+                REAL* data
+                data = flattenMatrix(u[lt-1], m1[0], m2[0], m3[0]);
+                message = (REAL*)malloc(sizeof(REAL)*m1[0]*m2[0]*(m3[0]/2));
+                for(z=1; z<m3[0]+1; z++){
+                    for(y=0; y<m2[0]; y++){
+                        for(x=0; x<m1[0]; x++){
+                            message[m2[0]*m1[0]*z m1[0]*y + x] = data[m2[0]*m1[0]*(z+m3[0]-1) + m1[0]*y + x];  
+                        }
+                    }
+                }
+                free(data);
+                MPI_Isend(message, m1[0]*m2[0]*(m3[0]/2), MPI_DOUBLE, 
+                          global_params->mpi_rank+split, 4, MPI_COMM_WORLD, &req);
+                MPI_Wait(&req, &status);
+                free(message);
+            } else if(global_params->mpi_rank % split == 0 && !global_params->active){
+                // receive data
+                global_params->active = true;
+                message = (REAL*)malloc(sizeof(REAL)*m1[0]*m2[0]*(m3[0]/2));
+                MPI_Irecv(message, m1[0]*m2[0]*(m3[0]/2), MPI_DOUBLE, 
+                          global_params->mpi_rank - split, 4,MPI_COMM_WORLD, &req);
+                MPI_Wait(&req, &status);
+                free(message);
+            }
+            split /= 2;
+    }
+	*/
 	// if(global_params->mpi_rank == 0){
 	// 	printMatrix(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
 	// }
     
-    //MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
+    
     if(global_params->mpi_rank==0){
         timer_stop(T_init);
         timer_start(T_bench);
     }
-
+    
+    
     //PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d\n", n1, n2, n3 );
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	//     if(global_params->mpi_rank == 1){
@@ -171,13 +283,15 @@ int main(int argc, const char **argv)
 	}
     
     MPI_Barrier(MPI_COMM_WORLD);
+    
     if(global_params->mpi_rank==0){
         timer_stop(T_bench);
         tinit = timer_elapsed(T_init);
         printf(" Initialization time: %f seconds\n", tinit);
     }
     
-    PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nx=%d, ny=%d, nz=%d\n", n1, n2, n3, nx[lt-1],ny[lt-1],nz[lt-1] );
+    
+    //PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nx=%d, ny=%d, nz=%d\n", n1, n2, n3, nx[lt-1],ny[lt-1],nz[lt-1] );
     rnm2 = norm2u3(r[0], n1, n2, (n3-2)/global_params->mpi_size+2, nx[lt-1],ny[lt-1],nz[lt-1]);
     
     MPI_Barrier(MPI_COMM_WORLD);
@@ -599,7 +713,10 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//     multigrid V-cycle routine
 	//---------------------------------------------------------------------
 	//      double precision u(nr),v(nv),r(nr)
-	int j,k;
+	int j,k,x,y,z;
+    int split;
+    
+    split = 1;
 	
 	//---------------------------------------------------------------------
 	//     down cycle.
@@ -608,7 +725,43 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//MEMORY TODO : check m1,m2,m3
 	for(k=lt-1-restriction;k>=1;k--) {
 		j = k-1;
-		rprj3_mpi(r[lt-1-k],m1[k],m2[k],m3[k],r[lt-1-j],m1[j],m2[j],m3[j]);
+        
+        // if to few elements per procs in Z, reduce proc count by two.
+        /*
+        if((m3[k] - 2)*split < MIN_ELEMS_PER_PROC && global_params->active){
+            MPI_Request req = MPI_REQUEST_NULL;
+            MPI_Status status;
+            REAL* message;
+            global_params->mpi_size = global_params->mpi_size - split;
+            // if not divisible by split, send of your matrix
+            if(global_params->mpi_rank % (split*2) != 0){
+                global_params->active = false;
+                message = flattenMatrix(r[lt-1-k], m1[k], m2[k], m3[k]);
+                MPI_Isend(message, m1[k]*m2[k]*m3[k], MPI_DOUBLE, 
+                          global_params->mpi_rank-split, 4, MPI_COMM_WORLD, &req);
+                MPI_Wait(&req, &status);
+            }
+            // else recv elements to work on
+            else{
+                message = (REAL*) malloc(sizeof(REAL)*m1[k]*m2[k]*m3[k]);
+                MPI_Irecv(message, m1[k]*m2[k]*m3[k], MPI_DOUBLE, 
+                          global_params->mpi_rank + split, 4,MPI_COMM_WORLD, &req);
+                MPI_Wait(&req, &status);
+                for(z=1; z<m3[k]; z++){
+                    for(y=0; y<m2[k]; y++){
+                        for(x=0; x<m1[k]; x++){
+                            r[lt-1-k][z + m3[k] - 2][y][x] = message[m2[k]*m1[k]*z + m1[k]*y + x];  
+                        }
+                    }
+                }
+            }
+            split *= 2;
+            free(message);
+        }
+        */
+        if(global_params->active){
+            rprj3_mpi(r[lt-1-k],m1[k],m2[k],m3[k]*split,r[lt-1-j],m1[j],m2[j],m3[j]);  
+        }
 		//ERROR HAS HAPPENED BY THIS TIME- it looks like the last matrix is not filled out
 		// if(global_params->mpi_rank == 0 && k==lt-1){
 		// 	printMatrix(r[lt-1-k],m1[k],m2[k],m3[k]);
@@ -624,20 +777,59 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	
 	for(k=1;k<lt-1-restriction;k++) {
 		j = k-1;
+        // split to more processors when level is reached again
+        /*
+        if(m3[j]*split > MIN_ELEMS_PER_PROC){
+            MPI_Request req = MPI_REQUEST_NULL;
+            MPI_Status status;
+            REAL* message;
+            global_params->mpi_size = global_params->mpi_size + split;
+            if(global_params->mpi_rank % (split/2) == 0 && global_params->active){
+                // send data
+                REAL* data
+                data = flattenMatrix(u[lt-1-j], m1[j], m2[j], m3[j]);
+                message = (REAL*)malloc(sizeof(REAL)*m1[j]*m2[j]*(m3[j]/2));
+                for(z=1; z<m3[k]+1; z++){
+                    for(y=0; y<m2[k]; y++){
+                        for(x=0; x<m1[k]; x++){
+                            message[m2[j]*m1[j]*z m1[j]*y + x] = data[m2[k]*m1[k]*(z+m3[j]-1) + m1[k]*y + x];  
+                        }
+                    }
+                }
+                free(data);
+                MPI_Isend(message, m1[k]*m2[k]*(m3[k]/2), MPI_DOUBLE, 
+                          global_params->mpi_rank+split, 4, MPI_COMM_WORLD, &req);
+                MPI_Wait(&req, &status);
+                free(message);
+            } else if(global_params->mpi_rank % split == 0 && !global_params->active){
+                // receive data
+                global_params->active = true;
+                message = (REAL*)malloc(sizeof(REAL)*m1[j]*m2[j]*(m3[j]/2));
+                MPI_Irecv(message, m1[k]*m2[k]*(m3[k]/2), MPI_DOUBLE, 
+                          global_params->mpi_rank - split, 4,MPI_COMM_WORLD, &req);
+                MPI_Wait(&req, &status);
+                free(message);
+            }
+            split /= 2;
+        }
+        */
+        
 		//---------------------------------------------------------------------
 		//        prolongate from level k-1  to k
 		//---------------------------------------------------------------------
-		zero3(u[lt-1-k],m1[k],m2[k],m3[k]);
-		
-		interp_mpi(u[lt-1-j],m1[j],m2[j],m3[j],u[lt-1-k], m1[k],m2[k],m3[k]);
-		//---------------------------------------------------------------------
-		//        compute residual for level k
-		//---------------------------------------------------------------------
-		resid(u[lt-1-k],r[lt-1-k],r[lt-1-k],m1[k],m2[k],m3[k], a);
-		//---------------------------------------------------------------------
-		//        apply smoother
-		//---------------------------------------------------------------------
-		psinv(r[lt-1-k],u[lt-1-k],m1[k],m2[k],m3[k],c);
+        if(global_params->active){
+            zero3(u[lt-1-k],m1[k],m2[k],m3[k]);
+            
+            interp_mpi(u[lt-1-j],m1[j],m2[j],m3[j]*split,u[lt-1-k], m1[k],m2[k],m3[k]);
+            //---------------------------------------------------------------------
+            //        compute residual for level k
+            //---------------------------------------------------------------------
+            resid(u[lt-1-k],r[lt-1-k],r[lt-1-k],m1[k],m2[k],m3[k], a);
+            //---------------------------------------------------------------------
+            //        apply smoother
+            //---------------------------------------------------------------------
+            psinv(r[lt-1-k],u[lt-1-k],m1[k],m2[k],m3[k],c);
+        }
 	}
 	j = lt - 2;
 	k = lt - 1;
