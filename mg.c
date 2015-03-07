@@ -57,6 +57,25 @@
 	-n	: problem size
 	-nit	: number of iterations
 	-lt	: sets the lt... i think this defines how large the "W" cycle is?
+	
+	check functions:
+		-resid
+		-rprj
+		-psinv
+		-interp
+		-comm3
+		-exchange
+		
+	hypothesis: whatever data is in u needs to be checked!
+		-copy serial code
+			-print r and u at each level
+				//n=8 nit=1
+				//2.643068e-01 - 4 processors
+				//1.042504e-01 - 1 procesor
+				
+	2 theories on the mpi stampede error-
+		1) an omp thread uses a matrix before it has been zeroed out
+		2) an mpi buffer is used before it has been allocated
 */
 
 #include <omp.h>
@@ -66,6 +85,7 @@
 #include "utility.h"
 #include "timer.h"
 #include "mg.h"
+#include "mmpy_kernel.h"
 
 #define MIN_ELEMS_PER_PROC 2
 
@@ -113,6 +133,7 @@ int main(int argc, const char **argv)
 	//setup initializes some of the variables used...
 	grid_t grid;
 	setup(&n1, &n2, &n3, &grid);
+<<<<<<< Updated upstream
 	//PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nxk=%d, nyk=%d\n", n1, n2, n3, nx[lt-1], ny[lt-1]);
 	//processor 0 tracks time and sets up solution matrix
     
@@ -120,12 +141,21 @@ int main(int argc, const char **argv)
         init_timers();
         timer_start(T_init);
     }
+=======
+	// PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nxk=%d, nyk=%d\n", n1, n2, n3, nx[lt-1], ny[lt-1]);
+	//processor 0 tracks time and sets up solution matrix
+    // if(global_params->mpi_rank==0){
+    //     init_timers();
+    //     timer_start(T_init);
+    // }
+>>>>>>> Stashed changes
 	
 	v = alloc3D(n1, n2, n3);
     
 	gen_v(v,n1,n2,n3,nx[lt-1],ny[lt-1], &grid);
 	
 	//Initialize arrays- currently does this in strips
+<<<<<<< Updated upstream
 	// printf("N1= %d, N3=%d\n",n1-2,((n3-2) / global_params->mpi_size + 2 + 2));
     //PPF_Print( MPI_COMM_WORLD, "n3=%d\n", n3 );
     // how the matrixes should be split up from the start.
@@ -140,6 +170,11 @@ int main(int argc, const char **argv)
 	r = allocGrids(lt, n1-2, n2-2, n3-2, 2);
 	
 	zero3(u[0],n1,n2,(n3-2) / global_params->mpi_size + 2); //zero-out all of u
+=======
+	printf("N1= %d, N3=%d\n",n1-2,((n3-2) / global_params->mpi_size + 2 + 2));
+	u = allocGrids(lt, n1-2, n2-2, (n3-2) / global_params->mpi_size, 2);
+	r = allocGrids(lt, n1-2, n2-2, (n3-2) / global_params->mpi_size, 2);
+>>>>>>> Stashed changes
 	
 	//create local v (different strip per processor)
 	REAL ***  local_v = splitMatrix(
@@ -150,6 +185,7 @@ int main(int argc, const char **argv)
 		false //don't put a buffer on this!
 	);
 	//exchange local_v data
+<<<<<<< Updated upstream
     if(global_params->mpi_size > 1){
         exchange(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
     }
@@ -270,17 +306,35 @@ int main(int argc, const char **argv)
 	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	//     if(global_params->mpi_rank == 1){
 	// 	printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
+=======
+	if(global_params->mpi_size > 1){
+		exchange(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
+	}
+	comm3(local_v,n1,n2,(n3-2)/global_params->mpi_size+2);
+	    
+	//MPI_Barrier(MPI_COMM_WORLD);
+	// if(global_params->mpi_rank==0){
+	// 	timer_stop(T_init);
+	// 	timer_start(T_bench);
+>>>>>>> Stashed changes
 	// }
+	
+	resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
+	// resid_kernel_wrapper(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
+	if(global_params->mpi_rank == 0) {
+		printf("\nRESIDUAL:\n");
+		printMatrix(r[0],n1,n2,(n3-2)/global_params->mpi_size + 2);
+	}
+	// error is sometime after here-
 	//each processor runs the multigrid algorithm
-    
-    for(it=1;it<=nit;it++) {
+	for(it=1;it<=nit;it++) {
 		//actual call to multigrid
-        //MPI_Barrier(MPI_COMM_WORLD);
 		mg3P(u,local_v,r,a,c,n1,n2,(n3-2)/global_params->mpi_size + 2,0);
 		//compute the residual error here...
 		//only pass in the spliced portion of v...
 		resid(u[0],local_v,r[0],n1,n2,(n3-2)/global_params->mpi_size + 2,a);
 	}
+<<<<<<< Updated upstream
     
     MPI_Barrier(MPI_COMM_WORLD);
     
@@ -301,6 +355,27 @@ int main(int argc, const char **argv)
         interpret_results(rnm2, global_params, tm);
     }
     
+=======
+	//     
+	    MPI_Barrier(MPI_COMM_WORLD);
+	//     if(global_params->mpi_rank==0){
+	// //         timer_stop(T_bench);
+	// 		tinit = 1.0;
+	// //         tinit = timer_elapsed(T_init);
+	// //         printf(" Initialization time: %f seconds\n", tinit);
+	//     }
+	//     
+	//     // PPF_Print( MPI_COMM_WORLD, "n1=%d, n2=%d, n3=%d, nx=%d, ny=%d, nz=%d\n", n1, n2, n3, nx[lt-1],ny[lt-1],nz[lt-1] );
+	rnm2 = norm2u3(r[0], n1, n2, (n3-2)/global_params->mpi_size+2, nx[lt-1],ny[lt-1],nz[lt-1]);
+	// //     
+	// //     MPI_Barrier(MPI_COMM_WORLD);
+	//     //validates the results and prints to console
+	if(global_params->mpi_rank == 0){
+	// //         double tm = timer_elapsed(T_bench);
+		double tm = 0.0;
+		interpret_results(rnm2, global_params, tm, omp_get_max_threads());
+	}
+>>>>>>> Stashed changes
 	free3D(v);
 	freeGrids(u);
 	freeGrids(r);
@@ -322,6 +397,12 @@ void gen_v(REAL*** z,int n1,int n2,int n3,int nx,int ny, grid_t* grid)
 	int *j1 = malloc(sizeof(int)*mm*2), 
 		*j2 = malloc(sizeof(int)*mm*2),
 		*j3 = malloc(sizeof(int)*mm*2);
+	
+	for(i3=0;i3<mm*2;i3++){
+		j1[i3] = 0;
+		j2[i3] = 0;
+		j3[i3] = 0;
+	}
 	
 	zran3(z,n1,n2,n3,nx,ny,j1,j2,j3, &m1, &m0, mm, grid);
 	#pragma omp parallel for private(i1,i2,i3)
@@ -453,140 +534,6 @@ void zran3(REAL ***z,int n1,int n2,int n3,int nx,int ny,int* j1,int* j2,int* j3,
 	*m0 = i0+1;
 }
 
-void gen_v_orig(REAL ***z,int n1,int n2,int n3,int nx,int ny, grid_t* grid){
-	int is1 = grid->is1, is2 = grid->is2, is3 = grid->is3, ie1 = grid->ie1, ie2 = grid->ie2, ie3 = grid->ie3;
-	int i0, m0, m1;
-	
-	int mm=10, i1, i2, i3, d1, e1, e2, e3;
-	double xx, x0, x1, a1, a2, ai;
-	double best;
-	double *ten= malloc(sizeof(double)*mm*2);
-	int i;
-	int *j1 = malloc(sizeof(int)*mm*2),
-		*j2 = malloc(sizeof(int)*mm*2),
-		*j3 = malloc(sizeof(int)*mm*2);
-	int *jg = malloc(sizeof(int)*4*mm*2);
-	
-	zero3(z,n1,n2,n3);
-	i = is1-2+nx*(is2-2+ny*(is3-2));
-	
-	d1 = ie1 - is1 + 1;
-	e1 = ie1 - is1 + 2;
-	e2 = ie2 - is2 + 2;
-	e3 = ie3 - is3 + 2;
-	
-	double seed=314159265.0, a=pow(5.0,13);
-	//double rng = drand48();
-	a1 = rnd_power( a, nx );
-	a2 = rnd_power( a, nx*ny );
-	ai = rnd_power( a, i );
-	x0 = rnd_randlc( seed, ai );
-	
-	for(i3=2;i3<=e3;i3++)
-	{
-		x1 = x0;
-		for(i2 = 2;i2<=e2;i2++)
-		{
-			xx = x1;
-			rnd_vranlc( d1, xx, a,z[0][0],(1+n1*(i2-1+n2*(i3-1))));
-			x1 = rnd_randlc( x1, a1 );
-		}
-		x0 = rnd_randlc( x0, a2 );
-	}
-	
-	for(i=0;i<mm;i++) {
-		ten[i+mm] = 0.0;
-		j1[i+mm] = 0;
-		j2[i+mm] = 0;
-		j3[i+mm] = 0;
-		ten[i] = 1.0;
-		j1[i] = 0;
-		j2[i] = 0;
-		j3[i] = 0;
-	}
-	
-	for(i3=1;i3<n3-1;i3++) {
-		for(i2=1;i2<n2-1;i2++) {
-			for(i1=1;i1<n1-1;i1++) {
-				if( z[i3][i2][i1] > ten[mm] ) {
-					ten[mm] = z[i3][i2][i1]; 
-					j1[mm] = i1;
-					j2[mm] = i2;
-					j3[mm] = i3;
-					bubble( ten, j1, j2, j3, mm, 1 );
-				}
-				if( z[i3][i2][i1] < ten[0] ) {
-					ten[0] = z[i3][i2][i1]; 
-					j1[0] = i1;
-					j2[0] = i2;
-					j3[0] = i3;
-					bubble( ten, j1, j2, j3, mm, 0 );
-				}
-			}
-		}
-	}
-	
-	//---------------------------------------------------------------------
-	//     Now which of these are globally best?
-	//---------------------------------------------------------------------
-	i1 = mm;
-	i0 = mm;
-	for(i=mm-1;i>=0;i--)
-	{
-		//best = z[0][0][j1[i1-1+mm]+n1*(j2[i1-1+mm]+n2*(j3[i1-1+mm]))];
-		best = z[j1[i1-1+mm]][j2[i1-1+mm]][j3[i1-1+mm]];
-		if(best==z[j1[i1-1+mm]][j2[i1-1+mm]][j3[i1-1+mm]]) {
-			jg[4*(i+mm)] = 0;
-			jg[1+4*(i+mm)] = is1 - 2 + j1[i1-1+mm]; 
-			jg[2+4*(i+mm)] = is2 - 2 + j2[i1-1+mm]; 
-			jg[3+4*(i+mm)] = is3 - 2 + j3[i1-1+mm]; 
-			i1 = i1-1;
-		} else {
-			jg[4*(i+mm)] = 0;
-			jg[1+4*(i+mm)] = 0; 
-			jg[2+4*(i+mm)] = 0; 
-			jg[3+4*(i+mm)] = 0; 
-		}         
-		ten[i+mm] = best;
-		
-		best = z[j3[i0-1]][j2[i0-1]][j1[i0-1]];
-		if(best==z[j3[i0-1]][j2[i0-1]][j1[i0-1]]) {
-			jg[4*i] = 0;
-			jg[1+4*i] = is1 - 2 + j1[i0-1]; 
-			jg[2+4*i] = is2 - 2 + j2[i0-1]; 
-			jg[3+4*i] = is3 - 2 + j3[i0-1]; 
-			i0 = i0-1;
-		} else {
-			jg[4*i] = 0;
-			jg[1+4*i] = 0; 
-			jg[2+4*i] = 0; 
-			jg[3+4*i] = 0; 
-		}
-		ten[i] = best;
-	}
-	
-	
-	free(jg);
-	free(ten);
-	
-	m1 = i1+1;
-	m0 = i0+1;
-	#pragma omp parallel for private(i1,i2,i3)
-	for(i3=0;i3<n3;i3++)
-		for(i2=0;i2<n2;i2++)
-			for(i1=0;i1<n1;i1++)
-				z[i3][i2][i1] = 0.0;
-	for(i=mm;i>=m0;i--)
-		z[j3[i-1]][j2[i-1]][j1[i-1]] = -1.0;
-	for(i=mm;i>=m1;i--)
-		z[j3[i-1+mm]][j2[i-1+mm]][j1[i-1+mm]] = 1.0;
-	free(j1);
-	free(j2);
-	free(j3);
-	
-	comm3(z,n1,n2,n3);
-}
-
 double norm2u3(REAL*** r,int n1,int n2,int n3, int nx,int ny,int nz)
 {
 	//---------------------------------------------------------------------
@@ -683,6 +630,13 @@ void resid(REAL ***u, REAL*** v, REAL*** r,
                 }
                 for(i1=1;i1<n1-1;i1++)
                 {
+<<<<<<< Updated upstream
+=======
+					//issue: r[1][0][1] = v[1][0][1] 
+					//		- a[0] * u[1][0][1]
+					//		- a[2] * edges
+					//		- a[3] * corners;
+>>>>>>> Stashed changes
                     r[i3][i2][i1] = v[i3][i2][i1] 
                         - a[0] * u[i3][i2][i1]
                         //---------------------------------------------------------------------
@@ -725,6 +679,7 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	//MEMORY TODO : check m1,m2,m3
 	for(k=lt-1-restriction;k>=1;k--) {
 		j = k-1;
+<<<<<<< Updated upstream
         
         // if to few elements per procs in Z, reduce proc count by two.
         /*
@@ -766,12 +721,16 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 		// if(global_params->mpi_rank == 0 && k==lt-1){
 		// 	printMatrix(r[lt-1-k],m1[k],m2[k],m3[k]);
 		// }
+=======
+		rprj3_mpi(r[lt-1-k],m1[k],m2[k],m3[k],r[lt-1-j],m1[j],m2[j],m3[j]);
+>>>>>>> Stashed changes
 	}
 	
 	k = 0;
 	//---------------------------------------------------------------------
 	//     compute an approximate solution on the coarsest grid
 	//---------------------------------------------------------------------
+	// printf("\nY SIZE=%d\nZ SIZE=%d\n",temp,temp);
 	zero3(u[lt-1-k],m1[k],m2[k],m3[k]);
 	psinv(r[lt-1-k],u[lt-1-k],m1[k],m2[k],m3[k], c);
 	
@@ -833,7 +792,7 @@ void mg3P(REAL**** u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,in
 	}
 	j = lt - 2;
 	k = lt - 1;
-	
+	// 
 	interp_mpi(u[lt-1-j],m1[j],m2[j],m3[j],u[0], n1,n2,n3);
 	resid(u[0],v,r[0],n1,n2,n3, a);
 	psinv(r[0],u[0],n1,n2,n3,c);
@@ -853,9 +812,12 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
 	//keeps track of the number of ghost cell regions the processor should wait for- first and last  strips require less
 	int receiveCount = 2;
 	
+<<<<<<< Updated upstream
 	//Exchange boundary data accross processors
 	//exchange(r,m1k,m2k,m3k);
 	
+=======
+>>>>>>> Stashed changes
 	//this seems to be incorrect - (it's larger than necessary)
 	//it initializes for the largest possible array needed (finest level), instead of adjusting to the current level size
 	if (!rprj3_init)
@@ -867,6 +829,12 @@ void rprj3_mpi(REAL*** r, int m1k,int m2k,int m3k, REAL*** s,int m1j,int m2j,int
         {
             _x1[i1] = malloc(sizeof(double)*(nm+1));
             _y1[i1] = malloc(sizeof(double)*(nm+1));
+<<<<<<< Updated upstream
+=======
+			for(j1=0;j3<=nm+1;j1++){
+				_x1[i1][j1] = 0.0;
+			}
+>>>>>>> Stashed changes
         }
         rprj3_init = true;
     }
@@ -934,7 +902,28 @@ void exchange(REAL ***r, int n1,int n2,int n3 ){
 	}
     free2D(ghost_data, 2);
     free2D(results, 2);
-    
+}
+
+void exchange_add(REAL ***r, int n1,int n2,int n3 ){
+	REAL ** ghost_data = getGhostCells(r,n1,n2,n3);
+	//just send the x*y planes- not including the buffer
+	int messageSize = n1*n2;
+	int i1,i2;
+	REAL ** results = exchange_data(ghost_data,messageSize);
+	
+	// put results into the r matrix
+	for (i2 = 0; i2 < n2; i2++) {
+		for (i1 = 0; i1 < n1; i1++) {
+			if(global_params->mpi_rank != 0 ){
+				r[0][i2][i1] += results[0][(n1)*i2 + i1];
+			}
+			if(global_params->mpi_rank != global_params->mpi_size - 1 ){
+				r[n3-1][i2][i1] += results[1][(n1)*i2 + i1];
+			}
+		}
+	}
+    free2D(ghost_data, 2);
+    free2D(results, 2);
 }
 
 //z is the coarser level, and u is the finer level
@@ -950,9 +939,12 @@ void interp_mpi(REAL ***z, int mm1, int mm2, int mm3, REAL ***u,
 	double *z1,*z2,*z3;
 	
 	static bool interp_init = false;
+<<<<<<< Updated upstream
 	
 	//Exchange boundary data accross processors
 	//exchange(z,mm1,mm2,mm3);
+=======
+>>>>>>> Stashed changes
 	
 	//Private arrays for each thread
 	static double **_z1;
@@ -968,6 +960,11 @@ void interp_mpi(REAL ***z, int mm1, int mm2, int mm3, REAL ***u,
 			_z1[i1] = malloc(sizeof(double)*m);
 			_z2[i1] = malloc(sizeof(double)*m);
 			_z3[i1] = malloc(sizeof(double)*m);
+			for (i2 = 0; i2 < m; i2++) {
+				_z1[i1][i2] = 0.0;
+				_z2[i1][i2] = 0.0;
+				_z3[i1][i2] = 0.0;
+			}
 		}
 		interp_init = true;
 	}
@@ -1111,6 +1108,7 @@ void interp_mpi(REAL ***z, int mm1, int mm2, int mm3, REAL ***u,
             }
         }
 	}
+	// exchange(u,n1,n2,n3);
 }
 
 //smoother
@@ -1181,7 +1179,10 @@ void psinv(REAL*** r, REAL*** u, int n1,int n2,int n3, double c[4])
     //     exchange boundary points
     //---------------------------------------------------------------------
 	//Exchange boundary data accross processors
+<<<<<<< Updated upstream
 	//exchange(u,n1,n2,n3);
+=======
+>>>>>>> Stashed changes
     comm3(u,n1,n2,n3);
 }
 

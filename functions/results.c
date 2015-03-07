@@ -8,33 +8,33 @@ void init_results(results_t* res)
     res->optype = strdup("floating point");
 }
 
-void print_results(results_t* res, FILE *out)
+void print_results(results_t* res)
 {
-    fprintf(out, "***** NAS Parallel Benchmarks C version %s ****\n", res->name);
-    fprintf(out, "* Class             = %c\n", res->clss);
+    printf("***** NAS Parallel Benchmarks C version %s ****\n", res->name);
+    printf("* Class             = %c\n", res->clss);
 
     if(res->n2 == 0 && res->n3 == 0 ) {
-        fprintf(out, "* Size              = %d\n", res->n1);
+        printf("* Size              = %d\n", res->n1);
     } else {
-        fprintf(out, "* Size              = %d X %d X %d\n", res->n1, res->n2, res->n3);
+        printf("* Size              = %d X %d X %d\n", res->n1, res->n2, res->n3);
     }
-    fprintf(out, "* Iterations        = %d\n", res->niter);
-    fprintf(out, "* Time in seconds   = %6.4f\n", res->time);
-    fprintf(out, "* ACCTime           = %e\n", res->acctime);
-    fprintf(out, "* Mops total        = %6.4f\n", res->mops);
-    fprintf(out, "* Operation type    = %s\n", res->optype);
+    printf("* Iterations        = %d\n", res->niter);
+    printf("* Time in seconds   = %6.4f\n", res->time);
+    printf("* ACCTime           = %e\n", res->acctime);
+    printf("* Mops total        = %6.4f\n", res->mops);
+    printf("* Operation type    = %s\n", res->optype);
     
-    fprintf(out, "* Verification      = ");
-    if (res->verified==1) fprintf(out, "Successful\n");
-    else if(res->verified==0) fprintf(out, "Failed\n");
-    else fprintf(out, "Not Performed\n");
+    printf("* Verification      = ");
+    if (res->verified==1) printf("Successful\n");
+    else if(res->verified==0) printf("Failed\n");
+    else printf("Not Performed\n");
 
-    fprintf(out, "* Threads requested = %d\n", res->numthreads);
+    printf("* Threads requested = %d\n", res->numthreads);
     
-    fprintf(out, "* Please send all errors/feedbacks to:\n");
-    fprintf(out, "* NPB Working Team\n");
-    fprintf(out, "* npb@nas.nasa.gov\n");
-    fprintf(out, "***************************************************************\n");
+    printf("* Please send all errors/feedbacks to:\n");
+    printf("* NPB Working Team\n");
+    printf("* npb@nas.nasa.gov\n");
+    printf("***************************************************************\n");
 }
 
 void print_verification(char clss, int verified, const char* BMName)
@@ -64,7 +64,7 @@ void set_results(results_t* res, const char* bname, char CLSS, int bn1, int bn2,
 	res->numthreads=num_threads;
 }
 
-void interpret_results(double rnm2,struct params* global, double tm){
+void interpret_results(double rnm2,struct params* global, double tm, int numThreads){
 	results_t res;
 	
 	bool verified = 0;
@@ -114,9 +114,10 @@ void interpret_results(double rnm2,struct params* global, double tm){
 		mflops,
 		(const char*)"floating point",
 		verified,
-		omp_get_max_threads()
+		numThreads
 	);
 
+<<<<<<< Updated upstream
 	print_results(&res, stdout);
 }
 
@@ -172,3 +173,7 @@ PPF_Print( MPI_COMM_WORLD, (mpi_rank % 2)
 			: "[%N] Message from even numbered nodes\n" );
 
 */
+=======
+	print_results(&res);
+}
+>>>>>>> Stashed changes

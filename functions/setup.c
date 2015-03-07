@@ -19,6 +19,12 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	int size1=3, size2=10;
 	int *mi = malloc(sizeof(int)*size1*size2);
 	int *ng = malloc(sizeof(int)*size1*size2);
+	for(j=0;j<size2;j++){
+		for(k=0;k<size1;k++){
+			mi[j*size1 + k] = 0;
+			ng[j*size1 + k] = 0;
+		}
+	}
 	
 	//old init globals function
 	nm = 2 + (1 << lm);
@@ -45,13 +51,19 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
         nz[k] = nz[k] / global_params->mpi_size;   
     }
 	
+	for(k=0;k<maxlevel;k++){
+		m1[k]=0;
+		m2[k]=0;
+		m3[k]=0;
+	}
+	
 	for(k=lt-1;k>=0;k--) {
 		for(ax=0;ax<size1;ax++) {
 			mi[ax+k*size1] = 2 + ng[ax+k*size1];
 		}
 		m1[k]=mi[  k*size1];
 		m2[k]=mi[1+k*size1];
-		m3[k]=(mi[2+k*size1] -2 ) / global_params->mpi_size + 2;
+		m3[k]=(mi[2+k*size1] - 2) / global_params->mpi_size + 2;
 	}
 	
 	k = lt-1;

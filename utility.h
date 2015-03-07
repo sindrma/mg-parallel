@@ -18,8 +18,6 @@ REAL *** splitMatrix(REAL*** mat,int x,int y,int z, int processorID, int size,bo
 REAL *** unflattenMatrix(REAL* mat,int x,int y,int z);
 REAL * flattenMatrix(REAL*** mat,int x,int y,int z);
 
-double TestNorm(double r[],int n1,int n2,int n3);
-
 REAL **alloc2D(int n, int m);
 void free2D(REAL** buffer, int n);
 

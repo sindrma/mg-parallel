@@ -44,9 +44,12 @@ REAL *** merge_matrices(REAL*** mat1, REAL *** mat2,int x1, int y1, int z1, int 
 
 //even processors send data first and then receive while odd ones are in the other order.
 REAL ** exchange_data(REAL** data,int size){
+<<<<<<< Updated upstream
 	//REAL ** messages = (REAL**) malloc(sizeof(REAL**)*2);
 	//messages[0] = (REAL*) malloc(sizeof(REAL*)*size);
 	//messages[1] = (REAL*) malloc(sizeof(REAL*)*size);
+=======
+>>>>>>> Stashed changes
     
     REAL **messages = alloc2D(2, size);
     
@@ -154,20 +157,6 @@ REAL * flattenMatrix(REAL*** mat,int x,int y,int z){
 	return data;
 }
 
-double TestNorm(double r[],int n1,int n2,int n3)
-{
-    double rnm2=0.0;
-    int i1,i2,i3;
-    for(i3=1;i3<n3-1;i3++)
-        for(i2=1;i2<n2-1;i2++)
-            for(i1=1;i1<n1-1;i1++)
-                rnm2+=r[i1+n1*(i2+n2*i3)]*r[i1+n1*(i2+n2*i3)];
-
-    rnm2 = sqrt( rnm2 / ((double)n1*n2*n3));
-    printf("*****TestNorm  %f\n", rnm2);
-    return rnm2;
-}
-
 //Fill the 3-dimensional array z with zeroes
 void zero3(double ***z,int n1,int n2,int n3)
 {
@@ -177,7 +166,7 @@ void zero3(double ***z,int n1,int n2,int n3)
     for(i3=0;i3<n3;i3++)
         for(i2=0;i2<n2;i2++)
             for(i1=0;i1<n1;i1++)
-                z[i3][i2][i1] = 0.; //[off+i1+n1*i2+n1*n2*i3]=0.0;
+                z[i3][i2][i1] = 0.0; //[off+i1+n1*i2+n1*n2*i3]=0.0;
 
 }
 
@@ -259,10 +248,13 @@ void bubble(double ten[],int j1[],int j2[],int j3[],int m,int ind )
 }
 
 REAL **alloc2D(int n, int m){
-    int i;
+    int i,j;
     REAL ** buffer = (REAL**) malloc(sizeof(REAL*)*n);
     for(i=0; i<n; i++){
         buffer[i] = (REAL*) malloc(sizeof(REAL)*m);
+		for(j=0; j<m; j++){
+			buffer[i][m] = 0.0;
+		}
     }
 	return buffer;
 }
@@ -294,6 +286,7 @@ REAL ***alloc3D(int n, int m,int k)
             m_buffer[z][y] = m_tempzyx;
         }
     }
+	zero3(m_buffer,n,m,k);
     return m_buffer;
 }
 
@@ -316,13 +309,13 @@ void free3D_old(REAL*** arr, int n, int m){
 }
 
 
-REAL **** allocGrids(size_t depth, size_t n1, size_t n2, size_t n3, size_t pad)
+REAL **** allocGrids(size_t depth, size_t n3, size_t n2, size_t n1, size_t pad)
 {
     size_t _n1 = n1, _n2 = n2, _n3 = n3;
     long total = 0;
     size_t indexes = 0;
     size_t zsize = 0, zysize = 0;
-    long i,d,z,y;
+    long i,d,z,y,x;
 
 
     for (i = 0; i < depth; i++)
@@ -355,6 +348,19 @@ REAL **** allocGrids(size_t depth, size_t n1, size_t n2, size_t n3, size_t pad)
         tempdz += _n1+pad;
         _n1 /= 2; _n2 /= 2; _n3 /= 2;
     }
+	//zero out arrays
+	_n1 = n1; _n2 = n2; _n3 = n3;
+	for (d = 0; d < depth; d++){
+		for (z = 0; z < _n1+pad; z++){
+			for (y = 0; y < _n2+pad; y++){
+				for (x = 0; x < _n3+pad; x++){
+					buffer[d][z][y][x] = 0.0;
+				}
+			}
+		}
+		// zero3(buffer[d],_n3+pad,_n2+pad,_n1+pad);
+		_n1 /= 2; _n2 /= 2; _n3 /= 2;
+	}
 
     return buffer;
 }
