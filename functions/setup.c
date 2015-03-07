@@ -51,7 +51,7 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 		}
 		m1[k]=mi[  k*size1];
 		m2[k]=mi[1+k*size1];
-		m3[k]=(mi[2+k*size1] -2 ) / global_params->mpi_size + 2;
+		m3[k]=((mi[2+k*size1] -2 ) / global_params->mpi_size + 2) < 3 ? 3 : (mi[2+k*size1] -2 ) / global_params->mpi_size + 2;
 	}
 	
 	k = lt-1;
@@ -78,7 +78,7 @@ void setup(int *n1, int *n2, int *n3, grid_t* grid)
 	free(ng);
 }
 
-struct params* setup_local(int argc, const char **argv)
+struct params* setup_local(int argc, char **argv)
 {
 	struct params parameters;
 	struct params *p = (struct params *) malloc(sizeof(struct params));
@@ -92,9 +92,10 @@ struct params* setup_local(int argc, const char **argv)
 	p->class	= 'U';
     //p->mpi_size = 1;
 	MPI_Comm_rank( MPI_COMM_WORLD, &p->mpi_rank );
-	MPI_Comm_size( MPI_COMM_WORLD, &p->mpi_size );
-    p->mpi_orig_size = p->mpi_size;
+	MPI_Comm_size( MPI_COMM_WORLD, &p->mpi_orig_size );
+    p->mpi_size = p->mpi_orig_size;
     p->active = true;
+	p->neig_offset = 1;
 	
 	//check command line input for manual entry
 	for (nArg=1; nArg < argc; nArg+=2){

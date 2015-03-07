@@ -10,6 +10,6 @@ This file is generated automatically by the setparams utility.
 in this directory. Do not modify it by hand.
 */
 void setup(int *n1, int *n2, int *n3, grid_t* grid);
-struct params* setup_local(int argc, const char **argv);
+struct params* setup_local(int argc, char **argv);
 void set_a(double *a ,struct params* global);
 void set_c(double *c ,struct params* global);

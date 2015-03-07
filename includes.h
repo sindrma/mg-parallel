@@ -78,6 +78,7 @@
 		int mpi_size;	//# of processors available
 		int mpi_rank;	//processor id
         int mpi_orig_size;
+        int neig_offset;
         bool active;
 		double seed;	//seed used to generate random indices
 		char class;	//class of test- legacy code

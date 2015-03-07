@@ -14,7 +14,7 @@ void gen_v_orig(REAL ***z,int n1,int n2,int n3,int nx,int ny, grid_t* grid);
 
 int getInputPars();
 void resid(REAL ***u, REAL*** v, REAL*** r, int n1,int n2,int n3, double a[4]);
-void mg3P(REAL ****u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,int n2,int n3, int restriction);
+void mg3P(REAL ****u, REAL*** v, REAL**** r, double a[4], double c[4], int n1,int n2,int n3);
 double norm2u3(REAL*** r,int n1,int n2,int n3, int nx,int ny,int nz);
 
 void exchange(REAL ***r, int n1,int n2,int n3 );

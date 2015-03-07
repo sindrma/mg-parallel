@@ -57,15 +57,15 @@ REAL ** exchange_data(REAL** data,int size){
     // initiate receive from the left and send to the left
     if(global_params->mpi_rank != 0){
         //MPI_Request lr_req, rr_req;
-        MPI_Irecv(messages[0],size, MPI_DOUBLE, global_params->mpi_rank - 1, 1,MPI_COMM_WORLD, &lr_req);
-        MPI_Isend(data[0], size, MPI_DOUBLE, global_params->mpi_rank - 1, 2, MPI_COMM_WORLD, &ls_req);
+        MPI_Irecv(messages[0],size, MPI_DOUBLE, global_params->mpi_rank - global_params->neig_offset, 1,MPI_COMM_WORLD, &lr_req);
+        MPI_Isend(data[0], size, MPI_DOUBLE, global_params->mpi_rank - global_params->neig_offset, 2, MPI_COMM_WORLD, &ls_req);
     }
     
     // initiate receive from the right and send to the right
     if(global_params->mpi_rank != global_params->mpi_size-1){
         //MPI_Request ls_req, rs_req;
-        MPI_Irecv(messages[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 2,MPI_COMM_WORLD,&rr_req);
-        MPI_Isend(data[1], size, MPI_DOUBLE, global_params->mpi_rank + 1, 1, MPI_COMM_WORLD,&rs_req);
+        MPI_Irecv(messages[1], size, MPI_DOUBLE, global_params->mpi_rank + global_params->neig_offset, 2,MPI_COMM_WORLD,&rr_req);
+        MPI_Isend(data[1], size, MPI_DOUBLE, global_params->mpi_rank + global_params->neig_offset, 1, MPI_COMM_WORLD,&rs_req);
     }
     
     MPI_Wait(&lr_req, &status);
