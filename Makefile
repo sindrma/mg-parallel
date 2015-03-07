@@ -3,7 +3,7 @@ BENCHMARK=mg
 PROGRAM=$(BENCHMARK)
 
 include make.def
-
+#TODO: need to include cuda library -L$CUDA_HOME/lib64 -lcudart
 OBJS = mg.o functions/setup.o functions/results.o timer.o random.o utility.o
 
 ifdef class

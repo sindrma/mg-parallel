@@ -1,0 +1,6 @@
+.c.o:
+        $(CC) $(CFLAGS) -c -o $@ $< -I/opt/apps/cuda/5.5/include
+
+$(PROGRAM): $(OBJS)
+        nvcc   -arch=sm_21 -c --compiler-options -fno-strict-aliasing  -O3 -I/opt/apps/cuda/5.5/include   -D_DOUBLE -DBLOCKDIM_X=1 -DBLOCKDIM_Y=1 -DBLOCKDIM_Z=1 mmpy_kernel.cu
+        $(CC) -o  $@ $(OBJS) mmpy_kernel.o $(LDFLAGS) -L/opt/apps/cuda/5.5/lib64 -lcudart -lcuda  -L/opt/nvidia/latest/cuda/lib64  -lcublas  -lm -pthread
